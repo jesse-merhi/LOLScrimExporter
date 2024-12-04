@@ -6,11 +6,10 @@ use tauri::command;
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![login])
+        .invoke_handler(tauri::generate_handler![login,logout])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
 #[command]
 async fn login(username: String, password: String) -> Result<String, String> {
     // Build the login payload
@@ -28,18 +27,43 @@ async fn login(username: String, password: String) -> Result<String, String> {
         .await
         .map_err(|err| err.to_string())?;
 
-    // Check for the "Set-Cookie" header
-    if let Some(cookie) = response.headers().get("Set-Cookie") {
-        let auth_token = cookie
-            .to_str()
-            .map_err(|_| "Failed to parse Set-Cookie header".to_string())?
-            .split(';')
-            .find(|s| s.starts_with("Authorization="))
-            .map(|s| s.replace("Authorization=", ""))
-            .ok_or("Authorization token not found".to_string())?;
+    // Collect all "Set-Cookie" headers
+    let cookies: Vec<String> = response
+        .headers()
+        .get_all("Set-Cookie")
+        .iter()
+        .filter_map(|cookie| cookie.to_str().ok().map(|s| s.to_owned()))
+        .collect();
 
-        Ok(auth_token)
+    if cookies.is_empty() {
+        Err("No Set-Cookie headers found".to_string())
     } else {
-        Err("Login failed: No Set-Cookie header found".to_string())
+        // Combine cookies into a single string for easier use
+        let cookie_header = cookies.join("; ");
+
+        // Return the combined cookies as a single string
+        Ok(cookie_header)
+    }
+}
+
+
+
+#[command]
+async fn logout(auth_token: String,refresh_token:String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://lol.grid.gg/auth/logout")
+        .header("Cookie", format!("Authorization={}; RefreshToken={}", auth_token,refresh_token))
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    if response.status().is_success() {
+        Ok("Logged Out".to_string())
+    } else {
+        Err(format!(
+            "Logout failed with status code: {}",
+            response.status()
+        ))
     }
 }
