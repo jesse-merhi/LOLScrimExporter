@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { graphqlQuery, graphqlVariables } from '@/lib/constants';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
+import MoonLoader from 'react-spinners/MoonLoader';
 import { Button } from './components/ui/button';
 import { ScrollArea } from './components/ui/scroll-area';
+import { Separator } from './components/ui/separator';
 // Type for a single player
 interface Player {
   id: string;
@@ -44,7 +46,7 @@ interface SeriesDetailsResponse {
 }
 
 function App() {
-  const [participants, setParticipants] = useState([]);
+  const [gameSummary, setGameSummary] = useState([]);
   const [seriesData, setSeriesData] = useState<any[]>([]);
   const [seriesDetails, setSeriesDetails] = useState<Record<
     string,
@@ -53,6 +55,7 @@ function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
 
   // Helper functions to manage localStorage
@@ -102,7 +105,7 @@ function App() {
     }
   };
 
-  const fetchParticipants = async () => {
+  const fetchGameSummary = async () => {
     const authToken = getAuthToken();
     if (!authToken) {
       console.error('No auth token, please log in first.');
@@ -110,7 +113,7 @@ function App() {
     }
 
     const response = await fetch(
-      'https://api.grid.gg/file-download/end-state/riot/series/2710435/games/1/summary',
+      `https://api.grid.gg/file-download/end-state/riot/series/${selectedGame}/games/1/summary`,
       {
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -119,7 +122,9 @@ function App() {
     );
 
     const data = await response.json();
-    setParticipants(data.participants);
+    setGameSummary(data.participants);
+    console.log('participants', gameSummary, seriesDetails);
+    setGameLoading(false);
   };
 
   const fetchSeries = async () => {
@@ -258,6 +263,13 @@ function App() {
     }
   }, [authToken]);
 
+  useEffect(() => {
+    const authToken = getAuthToken();
+    if (authToken) {
+      fetchGameSummary();
+    }
+  }, [selectedGame]);
+
   if (!authToken) {
     return (
       <div className='w-screen h-screen flex items-center justify-center'>
@@ -301,12 +313,12 @@ function App() {
     );
   }
   return (
-    <main className='h-screen w-screen'>
+    <main className='h-screen w-screen bg-primary-foreground'>
       {/* Sidebar and Main Content Layout */}
       <div className='h-full w-full flex flex-row'>
         {/* Sidebar */}
 
-        <div className='h-full w-[20%] bg-red-50 p-4'>
+        <div className='h-full w-[20%] bg-primary p-4'>
           <ScrollArea className='h-[90%]'>
             {seriesDetails &&
               seriesData &&
@@ -315,17 +327,21 @@ function App() {
                 const teams = node.teams;
                 const team1Score = seriesDetails[node.id]?.teams[0].score;
                 const team2Score = seriesDetails[node.id]?.teams[1].score;
-                console.log(seriesDetails);
-                console.log(team2Score);
                 return (
-                  <div
-                    className='h-10 w-full bg-red-100 flex justify-center items-center'
-                    key={index}
-                  >
-                    <img src={teams[0].baseInfo.logoUrl} className='h-full' />{' '}
-                    {team1Score} x {team2Score}
-                    <img src={teams[1].baseInfo.logoUrl} className='h-full' />
-                  </div>
+                  <>
+                    <div
+                      className='h-12 w-full border-b-2 text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'
+                      key={index}
+                      onClick={() => {
+                        setSelectedGame(node.id);
+                        setGameLoading(true);
+                      }}
+                    >
+                      <img src={teams[0].baseInfo.logoUrl} className='h-full' />{' '}
+                      {team1Score} x {team2Score}
+                      <img src={teams[1].baseInfo.logoUrl} className='h-full' />
+                    </div>
+                  </>
                 );
               })}
           </ScrollArea>
@@ -333,47 +349,124 @@ function App() {
             <Button onClick={logout}>Log Out</Button>
           </div>
         </div>
-        {selectedGame ? (
-          <div className='h-full w-full p-4'>
-            <div className='mb-4'>
-              <h1>Participants</h1>
-              <button
-                onClick={fetchParticipants}
-                className='bg-green-500 text-white px-4 py-2 mb-2'
-              >
-                Fetch Participants
-              </button>
+        <div className='h-full w-[80%] p-4'>
+          {gameLoading && selectedGame ? (
+            <div className='w-full h-full items-center flex justify-center'>
+              <MoonLoader />
+            </div>
+          ) : selectedGame ? (
+            <div className=''>
               <ul>
-                {participants.map((player, index) => (
-                  <li key={index} className='mb-2'>
-                    <p>{player.riotIdGameName}</p>
-                    <p>Wards Placed: {player.wardsPlaced}</p>
-                  </li>
-                ))}
+                {gameSummary ? (
+                  gameSummary.map((player, index) => (
+                    <>
+                      {index == 0 && (
+                        <div className='flex-row flex items-center my-2'>
+                          {' '}
+                          <h1 className='text-lg font-semibold'>
+                            Blue Team
+                          </h1>{' '}
+                          {seriesDetails[selectedGame].teams[0].score >
+                          seriesDetails[selectedGame].teams[1].score ? (
+                            <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-blue-500 text-white'>
+                              Victory
+                            </h1>
+                          ) : (
+                            <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-red-500 text-white'>
+                              Defeat
+                            </h1>
+                          )}
+                        </div>
+                      )}
+                      <div
+                        key={index}
+                        className='mb-2 flex justify-left items-center flex-row '
+                      >
+                        <div className=' w-[30%] flex flex-row justify-start items-center '>
+                          <img
+                            className='h-10 w-10'
+                            src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${player.championName}.png`}
+                          />
+                          <h1 className='px-3 text-xl w-[18%] text-center'>
+                            {player.champLevel}
+                          </h1>
+                          <div className='flex items-start justify-center flex-col'>
+                            <div className='font-semibold'>
+                              {player.riotIdGameName}
+                            </div>
+                            <div>{player.championName}</div>
+                          </div>
+                        </div>
+                        <div className='w-[15%]  justify-center items-center text-center'>
+                          <div>
+                            {player.kills}/{player.deaths}/{player.assists}
+                          </div>
+                        </div>
+                        <div className='flex items-center justify-center flex-row'>
+                          {[0, 1, 2, 3, 4, 5]
+                            .map((item) => player['item' + item])
+                            .sort((a, b) => b - a)
+                            .map((item) =>
+                              item ? (
+                                <img
+                                  className='h-10 w-10'
+                                  src={`https://opgg-static.akamaized.net/meta/images/lol/latest/item/${item}.png`}
+                                />
+                              ) : (
+                                <div className='border-2 border-slate-500 h-10 w-10'></div>
+                              )
+                            )}
+                          <img
+                            className='h-10 w-10'
+                            src={`https://opgg-static.akamaized.net/meta/images/lol/latest/item/${player['item6']}.png`}
+                          />
+                        </div>
+                        <div className='w-[10%] items-center  justify-center flex'>
+                          {' '}
+                          {player.totalMinionsKilled}
+                          cs
+                        </div>{' '}
+                        <div className='w-[10%] items-center justify-center flex'>
+                          {' '}
+                          {parseInt(player.goldEarned).toLocaleString('en-US', {
+                            maximumFractionDigits: 2,
+                          })}
+                          g
+                        </div>
+                      </div>
+                      {index == 4 && (
+                        <div className='flex-row flex items-center'>
+                          <Separator className='my-4 ' />
+                        </div>
+                      )}
+                      {index == 4 && (
+                        <div className='flex-row flex items-center my-2'>
+                          <h1 className='text-lg font-semibold'>Red Team</h1>
+                          {seriesDetails[selectedGame].teams[1].score >
+                          seriesDetails[selectedGame].teams[0].score ? (
+                            <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-blue-500 text-white'>
+                              Victory
+                            </h1>
+                          ) : (
+                            <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-red-500 text-white'>
+                              Defeat
+                            </h1>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ))
+                ) : (
+                  <div>No Game Data Found</div>
+                )}
               </ul>
             </div>
-
-            <div>
-              <h1>Series Data</h1>
-              <ul>
-                {seriesData.map((edge, index) => {
-                  const { node } = edge;
-                  const teams = node.teams;
-                  return (
-                    <li key={index} className='mb-2'>
-                      <p>
-                        {node.id}: {teams[0].baseInfo.name} vs{' '}
-                        {teams[1].baseInfo.name}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
+          ) : (
+            <div className='h-full w-full text-lg font-semibold flex justify-center items-center'>
+              Pick a game on the side to view its details.{' '}
             </div>
-          </div>
-        ) : (
-          <></>
-        )}
+          )}
+        </div>
       </div>
     </main>
   );

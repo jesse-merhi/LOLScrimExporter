@@ -24,6 +24,7 @@
     "lucide-react": "^0.464.0",
     "react": "^18",
     "react-dom": "^18",
+    "react-spinners": "^0.14.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7"
   },
