@@ -1,53 +1,30 @@
 import { useEffect, useState } from 'react';
-import { graphqlQuery, graphqlVariables } from '@/lib/constants';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import MoonLoader from 'react-spinners/MoonLoader';
 import { Button } from './components/ui/button';
-import { ScrollArea } from './components/ui/scroll-area';
 import { Separator } from './components/ui/separator';
-// Type for a single player
-interface Player {
-  id: string;
-  name: string;
-  character?: {
-    id: string;
-    name: string;
-  };
-}
+import SidebarLoader, {
+  SeriesDetailsResponse,
+  SeriesState,
+} from './components/sidebar-loader';
 
-// Type for a game
-interface Game {
-  teams: {
-    id: string;
-    players: Player[];
-  }[];
-}
+// Filter
+// - Per TEAM
+// - Losses? Wins?
+// - Champions
+// - Filter based on bans?
+// - Start Date, end date
+// - ASC DESC
 
-// Type for a single series state
-interface SeriesState {
-  title: {
-    nameShortened: string;
-  };
-  finished: boolean;
-  teams: {
-    id: string;
-    score: number;
-    players: Player[];
-  }[];
-  games: Game[];
-}
-
-// Type for the series details response
-interface SeriesDetailsResponse {
-  data: {
-    seriesState: SeriesState;
-  };
-}
+// Other Things to do
+// - Draft Order + Bans
+// UI/UX
+// Downloadable Files
+// Date
 
 function App() {
   const [gameSummary, setGameSummary] = useState([]);
-  const [seriesData, setSeriesData] = useState<any[]>([]);
   const [seriesDetails, setSeriesDetails] = useState<Record<
     string,
     SeriesState
@@ -57,6 +34,7 @@ function App() {
   const [authToken, setAuthToken] = useState('');
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
+  const [scores, setScores] = useState([0, 0]);
 
   // Helper functions to manage localStorage
   const getAuthToken = () => localStorage.getItem('authToken') || '';
@@ -69,6 +47,7 @@ function App() {
     localStorage.removeItem('authToken');
     setAuthToken('');
     localStorage.removeItem('refreshToken');
+    document.location.reload();
   };
 
   const login = async () => {
@@ -127,150 +106,12 @@ function App() {
     setGameLoading(false);
   };
 
-  const fetchSeries = async () => {
-    const authToken = getAuthToken();
-    if (!authToken) {
-      console.error('No auth token, please log in first.');
-      return;
-    }
-
-    // Fetch historical series
-    const historicalPayload = JSON.stringify({
-      operationName: 'GetHistoricalSeries',
-      variables: graphqlVariables,
-      query: graphqlQuery,
-    });
-
-    try {
-      const historicalResponse = await fetch(
-        'https://api.grid.gg/central-data/graphql',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: historicalPayload,
-        }
-      );
-
-      if (!historicalResponse.ok) {
-        console.error(
-          'Failed to fetch historical series:',
-          historicalResponse.statusText
-        );
-        return;
-      }
-
-      const historicalData = await historicalResponse.json();
-
-      // Extract series IDs
-      const seriesEdges = historicalData?.data?.allSeries?.edges || [];
-      const seriesIds = seriesEdges.map((edge) => edge.node.id);
-
-      if (seriesIds.length === 0) {
-        console.warn('No series found in the historical data.');
-        return;
-      }
-
-      console.log('Fetched series IDs:', seriesIds);
-
-      // Fetch details for each series ID
-      const seriesDetailsPromises = seriesIds.map(async (id) => {
-        const seriesDetailsPayload = JSON.stringify({
-          operationName: 'GetSeriesPlayersAndResults',
-          variables: { id },
-          query: `
-            query GetSeriesPlayersAndResults($id: ID!) {
-              seriesState(id: $id) {
-                title {
-                  nameShortened
-                }
-                finished
-                teams {
-                  id
-                  score
-                  players {
-                    id
-                    name
-                  }
-                }
-                games {
-                  teams {
-                    id
-                    players {
-                      id
-                      character {
-                        id
-                        name
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          `,
-        });
-
-        const response = await fetch(
-          'https://api.grid.gg/live-data-feed/series-state/graphql',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: seriesDetailsPayload,
-          }
-        );
-
-        if (!response.ok) {
-          console.error(
-            `Failed to fetch details for series ID ${id}:`,
-            response.statusText
-          );
-          return null;
-        }
-
-        const data: SeriesDetailsResponse = await response.json();
-        return { [id]: data.data.seriesState };
-      });
-
-      // Resolve all series details
-      const seriesDetails = await Promise.all(seriesDetailsPromises);
-
-      // Filter out failed requests and update state
-      const validSeriesDetails: SeriesDetailsResponse[] = seriesDetails.filter(
-        (detail) => detail !== null
-      );
-      let newRecord = {};
-      validSeriesDetails.forEach(
-        (series) => (newRecord = { ...series, ...newRecord })
-      );
-      setSeriesData(seriesEdges);
-      setSeriesDetails(newRecord);
-
-      console.log('Fetched series details:', validSeriesDetails);
-    } catch (error) {
-      console.error('Error fetching series:', error);
-    }
-  };
-
   useEffect(() => {
-    const authToken = getAuthToken();
-    if (authToken) {
-      fetchSeries();
-    }
-  }, [authToken]);
-
-  useEffect(() => {
-    const authToken = getAuthToken();
-    if (authToken) {
-      fetchGameSummary();
-    }
+    fetchGameSummary();
   }, [selectedGame]);
 
-  if (!authToken) {
+  console.log('AUTH', authToken);
+  if (!getAuthToken()) {
     return (
       <div className='w-screen h-screen flex items-center justify-center'>
         <div className='h-[50%] w-[50%]'>
@@ -318,35 +159,19 @@ function App() {
       <div className='h-full w-full flex flex-row'>
         {/* Sidebar */}
 
-        <div className='h-full w-[20%] bg-primary p-4'>
-          <ScrollArea className='h-[90%]'>
-            {seriesDetails &&
-              seriesData &&
-              seriesData.map((edge, index) => {
-                const { node } = edge;
-                const teams = node.teams;
-                const team1Score = seriesDetails[node.id]?.teams[0].score;
-                const team2Score = seriesDetails[node.id]?.teams[1].score;
-                return (
-                  <>
-                    <div
-                      className='h-12 w-full border-b-2 text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'
-                      key={index}
-                      onClick={() => {
-                        setSelectedGame(node.id);
-                        setGameLoading(true);
-                      }}
-                    >
-                      <img src={teams[0].baseInfo.logoUrl} className='h-full' />{' '}
-                      {team1Score} x {team2Score}
-                      <img src={teams[1].baseInfo.logoUrl} className='h-full' />
-                    </div>
-                  </>
-                );
-              })}
-          </ScrollArea>
-          <div className='h-[10%] flex items-end justify-center'>
-            <Button onClick={logout}>Log Out</Button>
+        <div className='h-full w-[20%] bg-primary'>
+          <div className='h-[90%] overflow-y-scroll no-scrollbar px-4'>
+            <SidebarLoader
+              authToken={getAuthToken()}
+              setGameLoading={setGameLoading}
+              setSelectedGame={setSelectedGame}
+              setScores={setScores}
+            />
+          </div>
+          <div className='h-[10%] flex items-center justify-center border-t-2 border-slate-700'>
+            <Button onClick={logout} className='text-[150%] '>
+              Log Out
+            </Button>
           </div>
         </div>
         <div className='h-full w-[80%] p-4'>
@@ -366,8 +191,7 @@ function App() {
                           <h1 className='text-lg font-semibold'>
                             Blue Team
                           </h1>{' '}
-                          {seriesDetails[selectedGame].teams[0].score >
-                          seriesDetails[selectedGame].teams[1].score ? (
+                          {scores[0] > scores[1] ? (
                             <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-blue-500 text-white'>
                               Victory
                             </h1>
@@ -442,8 +266,7 @@ function App() {
                       {index == 4 && (
                         <div className='flex-row flex items-center my-2'>
                           <h1 className='text-lg font-semibold'>Red Team</h1>
-                          {seriesDetails[selectedGame].teams[1].score >
-                          seriesDetails[selectedGame].teams[0].score ? (
+                          {scores[1] > scores[0] ? (
                             <h1 className='text-lg ml-2 px-2 py-[1px] rounded-md font-semibold bg-blue-500 text-white'>
                               Victory
                             </h1>
