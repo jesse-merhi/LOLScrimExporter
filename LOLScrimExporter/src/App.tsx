@@ -31,7 +31,7 @@ function App() {
   > | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [authToken, setAuthToken] = useState('');
+  const [authToken, setAuthToken] = useState<string | null>('');
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState([0, 0]);
@@ -106,6 +106,26 @@ function App() {
     setGameLoading(false);
   };
 
+  const checkLoggedIn = async () => {
+    const authToken = getAuthToken();
+    console.log('Checking Logged in');
+    if (!authToken) {
+      return;
+    }
+
+    const response = await fetch(`https://lol.grid.gg/auth/verify`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    console.log(response.json());
+  };
+
+  useEffect(() => {
+    checkLoggedIn();
+  }, []);
+
   useEffect(() => {
     fetchGameSummary();
   }, [selectedGame]);
@@ -166,6 +186,7 @@ function App() {
               setGameLoading={setGameLoading}
               setSelectedGame={setSelectedGame}
               setScores={setScores}
+              setAuthToken={setAuthToken}
             />
           </div>
           <div className='h-[10%] flex items-center justify-center border-t-2 border-slate-700'>

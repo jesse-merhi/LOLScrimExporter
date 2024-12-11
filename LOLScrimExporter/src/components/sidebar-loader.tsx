@@ -60,6 +60,7 @@ function SidebarLoader(props: {
   setGameLoading: (gameLoading: boolean) => void;
   setSelectedGame: (id: string | null) => void;
   setScores: (scores: number[]) => void;
+  setAuthToken: (authToken: string | null) => void;
 }) {
   const authToken = props.authToken;
   const [seriesData, setSeriesData] = useState<any[]>([]);
@@ -68,10 +69,16 @@ function SidebarLoader(props: {
     string,
     SeriesState
   > | null>(null);
-  const [isFetching, setIsFetching] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-
-  const fetchSeries = async (cursor: string | null = null) => {
+  const clearTokens = () => {
+    localStorage.removeItem('authToken');
+    props.setAuthToken(null);
+    localStorage.removeItem('refreshToken');
+    document.location.reload();
+  };
+  const fetchSeries = async () => {
+    console.log('FGETCHING');
     try {
       setIsFetching(true);
 
@@ -85,12 +92,16 @@ function SidebarLoader(props: {
           operationName: 'GetHistoricalSeries',
           variables: {
             ...graphqlVariables,
-            after: cursor,
+            after: endCursor,
           },
           query: graphqlQuery,
         }),
       });
 
+      if (response.status == 401) {
+        setIsFetching(false);
+        clearTokens();
+      }
       if (!response.ok) {
         console.error(
           'Failed to fetch historical series:',
@@ -102,7 +113,19 @@ function SidebarLoader(props: {
 
       const historicalData = await response.json();
       console.log(historicalData);
+      if (
+        !(
+          historicalData &&
+          historicalData.data &&
+          historicalData.data.allSeries
+        )
+      ) {
+        setIsFetching(false);
+        clearTokens();
+        return;
+      }
       const { edges: seriesEdges, pageInfo } = historicalData.data.allSeries;
+
       const seriesIds = seriesEdges.map(
         (edge: { node: { id: number } }) => edge.node.id
       );
@@ -147,6 +170,10 @@ function SidebarLoader(props: {
             }),
           }
         );
+        if (detailResponse.status == 401) {
+          setIsFetching(false);
+          props.setAuthToken(null);
+        }
 
         if (!detailResponse.ok) {
           console.error(
@@ -181,17 +208,19 @@ function SidebarLoader(props: {
     }
   };
 
-  useEffect(() => {
-    if (authToken) {
-      fetchSeries();
-    }
-  }, [authToken]);
+  // useEffect(() => {
+  //   if (authToken) {
+  //     setEndCursor(null);
+  //     setSeriesData([]);
+  //     fetchSeries();
+  //   }
+  // }, [authToken]);
 
   return (
     <InfiniteScroll
       isLoading={isFetching}
       hasMore={hasMore}
-      next={() => fetchSeries(endCursor)}
+      next={() => fetchSeries()}
     >
       {seriesDetails &&
         seriesData.map((edge) => {
