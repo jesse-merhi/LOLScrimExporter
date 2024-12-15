@@ -1,7 +1,7 @@
-import { graphqlQuery, graphqlVariables } from "@/lib/constants";
-import { useState } from "react";
-import MoonLoader from "react-spinners/MoonLoader";
-import InfiniteScroll from "./ui/infinite-scroll";
+import { graphqlQuery, graphqlVariables } from '@/lib/constants';
+import { useState } from 'react';
+import MoonLoader from 'react-spinners/MoonLoader';
+import InfiniteScroll from './ui/infinite-scroll';
 
 // Type for a single player
 export interface Player {
@@ -72,24 +72,24 @@ function SidebarLoader(props: {
   const [isFetching, setIsFetching] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const clearTokens = () => {
-    localStorage.removeItem("authToken");
+    localStorage.removeItem('authToken');
     props.setAuthToken(null);
-    localStorage.removeItem("refreshToken");
+    localStorage.removeItem('refreshToken');
     document.location.reload();
   };
   const fetchSeries = async () => {
-    console.log("FGETCHING");
+    console.log('FGETCHING');
     try {
       setIsFetching(true);
 
-      const response = await fetch("https://api.grid.gg/central-data/graphql", {
-        method: "POST",
+      const response = await fetch('https://api.grid.gg/central-data/graphql', {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          operationName: "GetHistoricalSeries",
+          operationName: 'GetHistoricalSeries',
           variables: {
             ...graphqlVariables,
             after: endCursor,
@@ -104,7 +104,7 @@ function SidebarLoader(props: {
       }
       if (!response.ok) {
         console.error(
-          "Failed to fetch historical series:",
+          'Failed to fetch historical series:',
           response.statusText
         );
         setIsFetching(false);
@@ -112,7 +112,6 @@ function SidebarLoader(props: {
       }
 
       const historicalData = await response.json();
-      console.log(historicalData);
       if (
         !(
           historicalData &&
@@ -131,7 +130,7 @@ function SidebarLoader(props: {
       );
 
       if (seriesIds.length === 0) {
-        console.warn("No series found in the historical data.");
+        console.warn('No series found in the historical data.');
         setIsFetching(false);
         return;
       }
@@ -139,15 +138,15 @@ function SidebarLoader(props: {
       // Fetch series details
       const seriesDetailsPromises = seriesIds.map(async (id: number) => {
         const detailResponse = await fetch(
-          "https://api.grid.gg/live-data-feed/series-state/graphql",
+          'https://api.grid.gg/live-data-feed/series-state/graphql',
           {
-            method: "POST",
+            method: 'POST',
             headers: {
               Authorization: `Bearer ${authToken}`,
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              operationName: "GetSeriesPlayersAndResults",
+              operationName: 'GetSeriesPlayersAndResults',
               variables: { id },
               query: `
                   query GetSeriesPlayersAndResults($id: ID!) {
@@ -203,7 +202,7 @@ function SidebarLoader(props: {
       setEndCursor(pageInfo.endCursor);
       setIsFetching(false);
     } catch (error) {
-      console.error("Error fetching series:", error);
+      console.error('Error fetching series:', error);
       setIsFetching(false);
     }
   };
@@ -218,13 +217,12 @@ function SidebarLoader(props: {
       {seriesDetails &&
         seriesData.map((edge) => {
           const { node } = edge;
-          console.log(node);
           const teams = node.teams;
           const team1Score = seriesDetails[node.id]?.teams[0]?.score ?? 0;
           const team2Score = seriesDetails[node.id]?.teams[1]?.score ?? 0;
           return (
             <div
-              className=" w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800"
+              className=' w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'
               key={node.id}
               onClick={() => {
                 props.setSelectedGame(node.id);
@@ -233,33 +231,33 @@ function SidebarLoader(props: {
               }}
             >
               <div>
-                {new Date(node.startTimeScheduled).toLocaleString("en", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
+                {new Date(node.startTimeScheduled).toLocaleString('en', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
                 })}
               </div>
-              <div className="h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800">
+              <div className='h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'>
                 <img
                   src={teams[0].baseInfo.logoUrl}
-                  className="h-full"
-                  alt="Team 1"
+                  className='h-full'
+                  alt='Team 1'
                 />
                 <div>
                   {team1Score} x {team2Score}
                 </div>
                 <img
                   src={teams[1].baseInfo.logoUrl}
-                  className="h-full"
-                  alt="Team 2"
+                  className='h-full'
+                  alt='Team 2'
                 />
               </div>
             </div>
           );
         })}
       {hasMore && (
-        <div className="h-12 w-full  text-accent flex justify-center items-center p-2">
-          <MoonLoader size={25} color="white" />
+        <div className='h-12 w-full  text-accent flex justify-center items-center p-2'>
+          <MoonLoader size={25} color='white' />
         </div>
       )}
     </InfiniteScroll>

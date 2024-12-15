@@ -1,15 +1,20 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
-import MoonLoader from "react-spinners/MoonLoader";
-import "./App.css";
-import Draft from "./components/draft";
-import Login from "./components/login";
-import SidebarLoader, { SeriesState } from "./components/sidebar-loader";
-import Stats from "./components/stats";
-import Summary from "./components/summary";
-import { Button } from "./components/ui/button";
-import { ScrollArea } from "./components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState } from 'react';
+import MoonLoader from 'react-spinners/MoonLoader';
+import './App.css';
+import Draft from './components/draft';
+import Login from './components/login';
+import SidebarLoader, { SeriesState } from './components/sidebar-loader';
+import Stats from './components/stats';
+import Summary from './components/summary';
+import { Button } from './components/ui/button';
+import {
+  getAuthToken,
+  getRefreshToken,
+  storeAuthToken,
+  storeRefreshToken,
+} from './lib/utils';
 // Filter
 // - Per TEAM
 // - Losses? Wins?
@@ -23,6 +28,7 @@ import { ScrollArea } from "./components/ui/scroll-area";
 // UI/UX
 // Downloadable Files
 // Date
+/// https://developer.riotgames.com/docs/lol#data-dragon
 
 function App() {
   const [gameSummary, setGameSummary] = useState([]);
@@ -31,22 +37,16 @@ function App() {
     SeriesState
   > | null>(null);
 
-  const [authToken, setAuthToken] = useState<string | null>("");
+  const [authToken, setAuthToken] = useState<string | null>('');
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState<number[]>([0, 0]);
 
   // Helper functions to manage localStorage
-  const getAuthToken = () => localStorage.getItem("authToken") || "";
-  const getRefreshToken = () => localStorage.getItem("refreshToken") || "";
-  const storeAuthToken = (token: string) =>
-    localStorage.setItem("authToken", token);
-  const storeRefreshToken = (token: string) =>
-    localStorage.setItem("refreshToken", token);
   const clearTokens = () => {
-    localStorage.removeItem("authToken");
-    setAuthToken("");
-    localStorage.removeItem("refreshToken");
+    localStorage.removeItem('authToken');
+    setAuthToken('');
+    localStorage.removeItem('refreshToken');
     document.location.reload();
   };
 
@@ -54,18 +54,18 @@ function App() {
     try {
       const authToken = getAuthToken();
       const refreshToken = getRefreshToken();
-      await invoke("logout", { authToken, refreshToken });
+      await invoke('logout', { authToken, refreshToken });
       clearTokens();
-      console.log("Logout successful");
+      console.log('Logout successful');
     } catch (error) {
-      console.error("Logout failed:", error);
+      console.error('Logout failed:', error);
     }
   };
 
   const fetchGameSummary = async () => {
     const authToken = getAuthToken();
     if (!authToken) {
-      console.error("No auth token, please log in first.");
+      console.error('No auth token, please log in first.');
       return;
     }
 
@@ -80,13 +80,12 @@ function App() {
 
     const data = await response.json();
     setGameSummary(data.participants);
-    console.log("participants", gameSummary, seriesDetails);
     setGameLoading(false);
   };
 
   const checkLoggedIn = async () => {
     const authToken = getAuthToken();
-    console.log("Checking Logged in");
+    console.log('Checking Logged in');
     if (!authToken) {
       return;
     }
@@ -96,8 +95,6 @@ function App() {
         Authorization: `Bearer ${authToken}`,
       },
     });
-
-    console.log(response.json());
   };
 
   useEffect(() => {
@@ -108,7 +105,7 @@ function App() {
     fetchGameSummary();
   }, [selectedGame]);
 
-  console.log("AUTH", authToken);
+  console.log('AUTH', authToken);
   if (!getAuthToken()) {
     return (
       <Login
@@ -119,13 +116,13 @@ function App() {
     );
   }
   return (
-    <main className="h-screen w-screen bg-primary-foreground">
+    <main className='h-screen w-screen bg-primary-foreground'>
       {/* Sidebar and Main Content Layout */}
-      <div className="h-full w-full flex flex-row">
+      <div className='h-full w-full flex flex-row'>
         {/* Sidebar */}
 
-        <div className="h-full w-[20%] bg-primary">
-          <div className="h-[90%] overflow-y-scroll no-scrollbar px-4">
+        <div className='h-[full] w-[20%] bg-primary'>
+          <div className='h-[90%] overflow-y-scroll no-scrollbar px-4'>
             <SidebarLoader
               authToken={getAuthToken()}
               setGameLoading={setGameLoading}
@@ -134,39 +131,40 @@ function App() {
               setAuthToken={setAuthToken}
             />
           </div>
-          <div className="h-[10%] flex items-center justify-center border-t-2 border-slate-700">
-            <Button onClick={logout} className="text-[150%] ">
+          <div className='h-[10%] flex items-center justify-center border-t-2 border-slate-700'>
+            <Button onClick={logout} className='text-[150%] '>
               Log Out
             </Button>
           </div>
         </div>
-        <div className="h-full w-[80%] py-4">
+        <div className='h-full w-[80%] py-4'>
           {gameLoading && selectedGame ? (
-            <div className="w-full h-full items-center flex justify-center">
+            <div className='w-full h-full items-center flex justify-center'>
               <MoonLoader />
             </div>
           ) : selectedGame ? (
-            <Tabs className="h-full w-full" defaultValue="summary">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="summary">Summary</TabsTrigger>
-                <TabsTrigger value="stats">Stats</TabsTrigger>
-                <TabsTrigger value="draft">Draft</TabsTrigger>
+            <Tabs className='h-full w-full' defaultValue='summary'>
+              <TabsList className='h-[5%] grid w-full grid-cols-3'>
+                <TabsTrigger value='summary'>Summary</TabsTrigger>
+                <TabsTrigger value='stats'>Stats</TabsTrigger>
+                <TabsTrigger value='draft'>Draft</TabsTrigger>
               </TabsList>
-              <ScrollArea className="overflow-y-auto h-full w-full p-4 flex items-center justify-center bg-red-50">
-                <TabsContent value="summary" className="bg-blue-50">
-                  <Summary gameSummary={gameSummary} scores={scores} />
-                </TabsContent>
-                <TabsContent value="stats" className="h-full w-full">
-                  <Stats gameSummary={gameSummary} />
-                </TabsContent>
-                <TabsContent value="draft" className="h-full w-full">
-                  <Draft />
-                </TabsContent>
-              </ScrollArea>
+              <TabsContent
+                value='summary'
+                className='bg-blue-50 h-[95%] w-full overflow-auto p-4'
+              >
+                <Summary gameSummary={gameSummary} scores={scores} />
+              </TabsContent>
+              <TabsContent value='stats' className='h-[95%] w-full'>
+                <Stats gameSummary={gameSummary} />
+              </TabsContent>
+              <TabsContent value='draft' className='h-[95%] w-full'>
+                <Draft selectedGame={selectedGame} />
+              </TabsContent>
             </Tabs>
           ) : (
-            <div className="h-full w-full text-lg font-semibold flex justify-center items-center">
-              Pick a game on the side to view its details.{" "}
+            <div className='h-full w-full text-lg font-semibold flex justify-center items-center'>
+              Pick a game on the side to view its details.{' '}
             </div>
           )}
         </div>

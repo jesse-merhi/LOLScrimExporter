@@ -60,5 +60,34 @@ export interface GameStats {
   item0: number;
   totalMinionsKilled: number;
   goldEarned: string;
-
 }
+
+type GameStatsKeys = keyof GameStats;
+
+// Create an array of all keys
+export const gameStatsKeys: GameStatsKeys[] = [
+  'damageDealtToObjectives',
+  'damageDealtToTurrets',
+  'detectorWardsPlaced',
+  'largestKillingSpree',
+  'largestMultiKill',
+  'magicDamageDealt',
+  'magicDamageDealtToChampions',
+  'magicDamageTaken',
+  'physicalDamageDealt',
+  'physicalDamageDealtToChampions',
+  'physicalDamageTaken',
+  'totalAllyJungleMinionsKilled',
+  'totalDamageDealt',
+  'totalDamageDealtToChampions',
+  'totalDamageShieldedOnTeammates',
+  'totalDamageTaken',
+  'totalEnemyJungleMinionsKilled',
+  'totalHeal',
+  'turretKills',
+  'turretTakedowns',
+  'visionScore',
+  'visionWardsBoughtInGame',
+  'wardsKilled',
+  'wardsPlaced',
+];

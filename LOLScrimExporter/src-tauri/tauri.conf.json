@@ -16,7 +16,8 @@
         "width": 1000,
         "height": 800,
         "minWidth": 1000,
-        "minHeight": 450
+        "minHeight": 450,
+        "center": true
       }
     ],
     "security": {
