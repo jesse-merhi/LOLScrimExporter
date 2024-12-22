@@ -158,11 +158,9 @@ function Draft({ selectedGame }: { selectedGame: string }) {
   }
 
   return (
-    <ScrollArea className='overflow-auto mx-auto p-6 bg-gray-800 text-white rounded-lg shadow-lg h-full'>
-      <h2 className='text-3xl font-bold text-center mb-6'>Draft Overview</h2>
-
+    <ScrollArea className='overflow-auto p-6 w-full  h-full'>
       {/* Ban Phase 1 */}
-      <div className='mb-6'>
+      <div className='mb-2'>
         <h3 className='text-xl font-semibold mb-2'>First Ban Phase</h3>
         <div className='grid grid-cols-2 gap-4 text-center'>
           <div className='bg-blue-500 p-4 rounded-lg'>
@@ -189,7 +187,7 @@ function Draft({ selectedGame }: { selectedGame: string }) {
       </div>
 
       {/* Pick Phase Following Correct Order */}
-      <div className='mb-6'>
+      <div className='mb-2'>
         <h3 className='text-xl font-semibold mb-2'>Pick Phase</h3>
         <div className='grid grid-cols-2 gap-4 text-center'>
           <div className='bg-blue-600 p-4 rounded-lg'>
@@ -206,7 +204,7 @@ function Draft({ selectedGame }: { selectedGame: string }) {
               />
             ))}
           </div>
-          <div className='bg-blue-600 p-4 rounded-lg'>
+          <div className='bg-red-600 p-4 rounded-lg flex flex-col justify-end items-end'>
             {draft.picks1Red.map((champion) => (
               <img
                 className='h-14 w-14'
@@ -224,7 +222,7 @@ function Draft({ selectedGame }: { selectedGame: string }) {
       </div>
 
       {/* Ban Phase 2 */}
-      <div className='mb-6'>
+      <div className='mb-2'>
         <h3 className='text-xl font-semibold mb-2'>Second Ban Phase</h3>
         <div className='grid grid-cols-2 gap-4 text-center'>
           <div className='bg-blue-500 p-4 rounded-lg'>
@@ -237,7 +235,7 @@ function Draft({ selectedGame }: { selectedGame: string }) {
               ))}
             </div>
           </div>
-          <div className='bg-red-500 p-4 rounded-lg'>
+          <div className='bg-red-500 p-4 rounded-lg '>
             <div className='flex justify-center'>
               {draft.bans2Red.map((champion) => (
                 <img
@@ -251,11 +249,10 @@ function Draft({ selectedGame }: { selectedGame: string }) {
       </div>
 
       {/* Final Picks */}
-      <div className='mb-6'>
+      <div>
         <h3 className='text-xl font-semibold mb-2'>Final Pick Phase</h3>
         <div className='grid grid-cols-2 gap-4 text-center'>
-          <div className='bg-blue-800 p-4 rounded-lg'>
-            <h4 className='font-bold'>Blue Picks</h4>
+          <div className='bg-blue-600 p-4 rounded-lg'>
             {draft.picks3Blue.map((champion) => (
               <img
                 className='h-14 w-14'
@@ -263,7 +260,7 @@ function Draft({ selectedGame }: { selectedGame: string }) {
               />
             ))}
           </div>
-          <div className='bg-red-800 p-4 rounded-lg'>
+          <div className='bg-red-600 p-4 rounded-lg flex flex-col items-end justify-end'>
             {draft.picks3Red.map((champion) => (
               <img
                 className='h-14 w-14'

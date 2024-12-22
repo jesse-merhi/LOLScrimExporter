@@ -15,6 +15,7 @@ import {
   storeAuthToken,
   storeRefreshToken,
 } from './lib/utils';
+import Filter from './components/filter';
 // Filter
 // - Per TEAM
 // - Losses? Wins?
@@ -29,6 +30,7 @@ import {
 // Downloadable Files
 // Date
 /// https://developer.riotgames.com/docs/lol#data-dragon
+// https://ddragon.leagueoflegends.com/cdn/14.24.1/data/en_US/champion.json
 
 function App() {
   const [gameSummary, setGameSummary] = useState([]);
@@ -122,7 +124,8 @@ function App() {
         {/* Sidebar */}
 
         <div className='h-[full] w-[20%] bg-primary'>
-          <div className='h-[90%] overflow-y-scroll no-scrollbar px-4'>
+          <Filter />
+          <div className='h-[80%] overflow-y-scroll no-scrollbar px-4'>
             <SidebarLoader
               authToken={getAuthToken()}
               setGameLoading={setGameLoading}
@@ -131,11 +134,12 @@ function App() {
               setAuthToken={setAuthToken}
             />
           </div>
-          <div className='h-[10%] flex items-center justify-center border-t-2 border-slate-700'>
-            <Button onClick={logout} className='text-[150%] '>
-              Log Out
-            </Button>
-          </div>
+          <Button
+            onClick={logout}
+            className='h-[10%] w-full text-xl flex items-center justify-center border-t-2 border-foreground bg-foreground hover:bg-gray-900 '
+          >
+            Log Out
+          </Button>
         </div>
         <div className='h-full w-[80%] py-4'>
           {gameLoading && selectedGame ? (
@@ -151,14 +155,14 @@ function App() {
               </TabsList>
               <TabsContent
                 value='summary'
-                className='bg-blue-50 h-[95%] w-full overflow-auto p-4'
+                className='bg-blue-50  w-full  h-[95%]'
               >
                 <Summary gameSummary={gameSummary} scores={scores} />
               </TabsContent>
               <TabsContent value='stats' className='h-[95%] w-full'>
                 <Stats gameSummary={gameSummary} />
               </TabsContent>
-              <TabsContent value='draft' className='h-[95%] w-full'>
+              <TabsContent value='draft' className='h-full w-full'>
                 <Draft selectedGame={selectedGame} />
               </TabsContent>
             </Tabs>

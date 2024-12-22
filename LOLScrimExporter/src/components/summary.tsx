@@ -1,5 +1,6 @@
 import { GameStats } from '@/lib/types/gameStats';
 import { Separator } from './ui/separator';
+import { ScrollArea } from './ui/scroll-area';
 
 function Summary({
   gameSummary,
@@ -9,7 +10,7 @@ function Summary({
   scores: number[];
 }) {
   return (
-    <div className='w-full h-full'>
+    <ScrollArea className='overflowy-auto px-4 w-full h-full'>
       {gameSummary ? (
         gameSummary.map((player, index) => (
           <>
@@ -110,7 +111,7 @@ function Summary({
       ) : (
         <div>No Game Data Found</div>
       )}
-    </div>
+    </ScrollArea>
   );
 }
 
