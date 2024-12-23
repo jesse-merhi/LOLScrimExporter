@@ -68,18 +68,6 @@ query GetHistoricalSeries(
             id
           }
         }
-        productServiceLevels {
-          productName
-          serviceLevel
-        }
-        externalLinks {
-          dataProvider {
-            name
-          }
-          externalEntity {
-            id
-          }
-        }
       }
     }
   }

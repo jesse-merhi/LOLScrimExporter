@@ -1,12 +1,34 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod commands;
 use serde_json::json;
 use tauri::command;
-
+use log::LevelFilter;
+use env_logger::Builder;
+use std::io::Write;
 
 fn main() {
+    // Initialize the logger
+    Builder::new()
+        .filter(None, LevelFilter::Info) // Set the desired log level
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "[{} {}:{}] - {}",
+                record.level(),
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                record.args()
+            )
+        })
+        .init();
+
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![login,logout])
+        .invoke_handler(tauri::generate_handler![
+            commands::fetch_and_process_series,
+            login,
+            logout
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
