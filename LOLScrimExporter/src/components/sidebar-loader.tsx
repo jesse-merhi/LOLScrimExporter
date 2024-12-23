@@ -1,10 +1,10 @@
-import { graphqlQuery, graphqlVariables } from '@/lib/constants';
-import { useEffect, useState } from 'react';
-import MoonLoader from 'react-spinners/MoonLoader';
-import InfiniteScroll from './ui/infinite-scroll';
-import { DateRange } from 'react-day-picker';
-import { GameStats } from '@/lib/types/gameStats';
-import { getAuthToken } from '@/lib/utils';
+import { graphqlQuery, graphqlVariables } from "@/lib/constants";
+import { GameStats } from "@/lib/types/gameStats";
+import { getAuthToken } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { DateRange } from "react-day-picker";
+import MoonLoader from "react-spinners/MoonLoader";
+import InfiniteScroll from "./ui/infinite-scroll";
 
 // Type for a single player
 export interface Player {
@@ -54,6 +54,12 @@ export interface SeriesState {
 export interface SeriesStateWithId extends SeriesState {
   id: number;
 }
+
+export interface MyOrg {
+  id: string;
+  name: string;
+  userCount: number;
+}
 export interface FilterConfig {
   dateRange: DateRange;
   wins: boolean;
@@ -86,9 +92,10 @@ function SidebarLoader(props: {
   const [hasMore, setHasMore] = useState(false);
 
   const [filters, setFilters] = useState<FilterConfig | null>(null);
-  const fetchFilters = () => {
+  const fetchFilters = async () => {
+    console.log("Fetching Filters");
     // Load filters from localStorage on mount
-    const filterConfigStr = localStorage.getItem('filterConfig');
+    const filterConfigStr = localStorage.getItem("filterConfig");
     if (filterConfigStr) {
       const filterConfig: FilterConfig = JSON.parse(filterConfigStr);
       setSeriesData([]);
@@ -96,35 +103,44 @@ function SidebarLoader(props: {
       setFilters(filterConfig);
       setFetchedIds([]);
       setHasMore(true);
+      setEndCursor(null);
     }
   };
   useEffect(() => {
-    const handleFiltersUpdate = () => {
-      fetchFilters();
+    const handleFiltersUpdate = async () => {
+      console.log("HERE");
+      await fetchFilters();
       // Trigger re-fetch for series data
       fetchSeries();
     };
-    handleFiltersUpdate();
-    // Listen for `filtersUpdated` events
-    window.addEventListener('filtersUpdated', handleFiltersUpdate);
+    window.addEventListener("filtersUpdated", handleFiltersUpdate);
 
     return () => {
-      window.removeEventListener('filtersUpdated', handleFiltersUpdate);
+      window.removeEventListener("filtersUpdated", handleFiltersUpdate);
     };
   }, []);
 
+  useEffect(() => {
+    // Only run once, on mount
+    fetchFilters();
+  }, []);
+
+  // Separate effect that runs again when 'filters' changes from null to something valid
+  useEffect(() => {
+    if (filters) {
+      fetchSeries();
+    }
+  }, [filters]);
+
   const clearTokens = () => {
-    localStorage.removeItem('getAuthToken()');
-    localStorage.removeItem('refreshToken');
+    localStorage.removeItem("getAuthToken()");
+    localStorage.removeItem("refreshToken");
     document.location.reload();
   };
   const fetchSeries = async () => {
-    console.log('fetchingSeries');
     if (!filters) return; // Wait for filters to load
     try {
       setIsFetching(true);
-      console.log('fetch');
-
       const teamIds =
         filters.teams.length > 0
           ? filters.teams.map((team) => team.value)
@@ -139,14 +155,14 @@ function SidebarLoader(props: {
         filters.dateRange?.from || new Date(2020, 0, 1).toISOString();
       const windowEndTime = filters.dateRange?.to || new Date().toISOString();
 
-      const response = await fetch('https://api.grid.gg/central-data/graphql', {
-        method: 'POST',
+      const response = await fetch("https://api.grid.gg/central-data/graphql", {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          operationName: 'GetHistoricalSeries',
+          operationName: "GetHistoricalSeries",
           variables: {
             ...graphqlVariables,
             after: endCursor,
@@ -159,6 +175,10 @@ function SidebarLoader(props: {
         }),
       });
       if (response.status == 401) {
+        console.error(
+          "Failed to fetch historical series:",
+          response.statusText
+        );
         setIsFetching(false);
         setHasMore(false);
         clearTokens();
@@ -166,7 +186,7 @@ function SidebarLoader(props: {
       }
       if (!response.ok) {
         console.error(
-          'Failed to fetch historical series:',
+          "Failed to fetch historical series:",
           response.statusText
         );
         setIsFetching(false);
@@ -182,7 +202,7 @@ function SidebarLoader(props: {
           historicalData.data.allSeries
         )
       ) {
-        console.error('Couldnt Get historical Data');
+        console.error("Couldnt Get historical Data", historicalData);
         setIsFetching(false);
         setHasMore(false);
         return;
@@ -195,7 +215,7 @@ function SidebarLoader(props: {
       );
 
       if (seriesIds.length === 0) {
-        console.warn('No series found in the historical data.');
+        console.warn("No series found in the historical data.");
         setIsFetching(false);
         setHasMore(false);
         return;
@@ -209,15 +229,15 @@ function SidebarLoader(props: {
           return;
         }
         const detailResponse = await fetch(
-          'https://api.grid.gg/live-data-feed/series-state/graphql',
+          "https://api.grid.gg/live-data-feed/series-state/graphql",
           {
-            method: 'POST',
+            method: "POST",
             headers: {
               Authorization: `Bearer ${getAuthToken()}`,
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              operationName: 'GetSeriesPlayersAndResults',
+              operationName: "GetSeriesPlayersAndResults",
               variables: { id },
               query: `
                 query GetSeriesPlayersAndResults($id: ID!) {
@@ -264,10 +284,6 @@ function SidebarLoader(props: {
         );
 
         if (!gameSummaryResponse.ok) {
-          console.error(
-            `Failed to fetch game summary for series ID ${id}:`,
-            gameSummaryResponse.statusText
-          );
           return null;
         }
 
@@ -292,30 +308,113 @@ function SidebarLoader(props: {
 
       // Apply client-side filters
       var isEarlierPatch = false;
+
+      async function fetchTeamsByName(name: string) {
+        const url = "https://api.grid.gg/central-data/graphql";
+        const requestBody = {
+          operationName: "GetTeamsFilter",
+          variables: {
+            first: 50,
+            name: { contains: name },
+          },
+          query: `
+            query GetTeamsFilter($name: StringFilter, $first: Int) {
+              teams(filter: { name: $name }, first: $first) {
+                edges {
+                  node {
+                    id
+                    name
+                    logoUrl
+                  }
+                }
+              }
+            }
+          `,
+        };
+
+        try {
+          const authToken = getAuthToken();
+          if (!authToken) {
+            console.error("No auth token, please log in first.");
+            return [];
+          }
+
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          const json = await response.json();
+          const edges = json?.data?.teams?.edges || [];
+          return edges.map((edge: any) => ({
+            label: edge.node.name,
+            value: edge.node.id,
+            logoUrl: edge.node.logoUrl,
+          }));
+        } catch (error) {
+          console.error("Error fetching Teams:", error);
+          return [];
+        }
+      }
+
+      // Modify fetchSeries to use fetchTeamsByName for fetching team ID
+      const teamResponse = await fetch(
+        "https://lol.grid.gg/api/organisations/mine",
+        {
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+        }
+      );
+      const teamData: MyOrg = await teamResponse.json();
+      const myteam = teamData.name;
+
+      // Fetch team ID for myteam
+      const teamsByName = await fetchTeamsByName(myteam);
+      let myteamId: string;
+      if (teamsByName.length > 0) {
+        myteamId = teamsByName[0].value;
+      }
       const filteredSeriesDetails = validSeriesDetails.filter((detail) => {
         const { seriesState, participants, patch } = detail;
-        if (filters.patch && !filters.patch.startsWith(patch)) {
-          console.log(filters.patch, '+', patch);
+        console.log("HERE");
+        if (filters.patch && !patch.startsWith(filters.patch)) {
+          console.log(filters.patch, "+", patch);
           if (patch < filters.patch) {
             isEarlierPatch = true;
           }
           return false;
         }
+        console.log("HERE2");
         if (seriesState && seriesState.teams) {
-          // Filter by wins/losses
-          if (
-            filters.wins &&
-            !seriesState.teams.some((team) => team.score > 0)
-          ) {
-            return false;
-          }
-          if (
-            filters.losses &&
-            !seriesState.teams.some((team) => team.score === 0)
-          ) {
+          const team1 = seriesState.teams[0];
+          const team2 = seriesState.teams[1];
+
+          const isTeam1 = team1.id === myteamId;
+          const isTeam2 = team2.id === myteamId;
+
+          // Determine if my team won or lost
+          const myTeamWon =
+            (isTeam1 && team1.score > team2.score) ||
+            (isTeam2 && team2.score > team1.score);
+          const myTeamLost =
+            (isTeam1 && team1.score < team2.score) ||
+            (isTeam2 && team2.score < team1.score);
+
+          // Check filters for wins, losses, or both
+          const showWins = filters.wins && myTeamWon;
+          const showLosses = filters.losses && myTeamLost;
+
+          if (!(showWins || showLosses)) {
+            // Exclude this series if it doesn't meet the filter criteria
             return false;
           }
         }
+
         // Filter by champions picked
         if (filters.championsPicked.length > 0) {
           const pickedChampionIds = filters.championsPicked.map((c) => c.label);
@@ -337,10 +436,10 @@ function SidebarLoader(props: {
             return false;
           }
         }
-
         return true;
       });
-      if (isEarlierPatch) {
+      console.log(filteredSeriesDetails);
+      if (isEarlierPatch && filteredSeriesDetails.length == 0) {
         setIsFetching(false);
         setHasMore(false);
         return;
@@ -368,7 +467,7 @@ function SidebarLoader(props: {
       setFetchedIds((prev) => [...prev, ...seriesIds]);
       setIsFetching(false);
     } catch (error) {
-      console.error('Error fetching series:', error);
+      console.error("Error fetching series:", error);
       setIsFetching(false);
     }
   };
@@ -388,7 +487,7 @@ function SidebarLoader(props: {
           const team2Score = seriesDetails[node.id]?.teams[1]?.score ?? 0;
           return (
             <div
-              className=' w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'
+              className=" w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800"
               key={node.id}
               onClick={() => {
                 props.setSelectedGame(node.id);
@@ -397,25 +496,25 @@ function SidebarLoader(props: {
               }}
             >
               <div>
-                {new Date(node.startTimeScheduled).toLocaleString('en', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
+                {new Date(node.startTimeScheduled).toLocaleString("en", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
                 })}
               </div>
-              <div className='h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'>
+              <div className="h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800">
                 <img
                   src={teams[0].baseInfo.logoUrl}
-                  className='h-full'
-                  alt='Team 1'
+                  className="h-full"
+                  alt="Team 1"
                 />
                 <div>
                   {team1Score} x {team2Score}
                 </div>
                 <img
                   src={teams[1].baseInfo.logoUrl}
-                  className='h-full'
-                  alt='Team 2'
+                  className="h-full"
+                  alt="Team 2"
                 />
               </div>
             </div>
@@ -423,8 +522,8 @@ function SidebarLoader(props: {
         })}
 
       {isFetching && (
-        <div className='h-12 w-full  text-accent flex justify-center items-center p-2'>
-          <MoonLoader size={25} color='white' />
+        <div className="h-12 w-full  text-accent flex justify-center items-center p-2">
+          <MoonLoader size={25} color="white" />
         </div>
       )}
     </InfiniteScroll>
