@@ -1,7 +1,7 @@
 export const graphqlVariables = {
-  first: 10,
-  windowStartTime: '2020-01-01T00:00:00.000+11:00',
-  windowEndTime: new Date().toISOString(),
+  first: 25,
+  // windowStartTime: '2020-01-01T00:00:00.000+11:00',
+  // windowEndTime: new Date().toISOString(),
   types: ['SCRIM'],
 };
 

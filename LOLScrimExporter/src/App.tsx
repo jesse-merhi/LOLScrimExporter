@@ -38,8 +38,7 @@ function App() {
     string,
     SeriesState
   > | null>(null);
-
-  const [authToken, setAuthToken] = useState<string | null>('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState<number[]>([0, 0]);
@@ -47,7 +46,6 @@ function App() {
   // Helper functions to manage localStorage
   const clearTokens = () => {
     localStorage.removeItem('authToken');
-    setAuthToken('');
     localStorage.removeItem('refreshToken');
     document.location.reload();
   };
@@ -85,38 +83,13 @@ function App() {
     setGameLoading(false);
   };
 
-  const checkLoggedIn = async () => {
-    const authToken = getAuthToken();
-    console.log('Checking Logged in');
-    if (!authToken) {
-      return;
-    }
-
-    const response = await fetch(`https://lol.grid.gg/auth/verify`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-  };
-
-  useEffect(() => {
-    checkLoggedIn();
-  }, []);
-
   useEffect(() => {
     fetchGameSummary();
   }, [selectedGame]);
-
-  console.log('AUTH', authToken);
-  if (!getAuthToken()) {
-    return (
-      <Login
-        setAuthToken={setAuthToken}
-        storeAuthToken={storeAuthToken}
-        storeRefreshToken={storeRefreshToken}
-      />
-    );
+  if (!reloadKey && !getAuthToken()) {
+    return <Login setReloadKey={setReloadKey} />;
   }
+
   return (
     <main className='h-screen w-screen bg-primary-foreground'>
       {/* Sidebar and Main Content Layout */}
@@ -127,11 +100,9 @@ function App() {
           <Filter />
           <div className='h-[80%] overflow-y-scroll no-scrollbar px-4'>
             <SidebarLoader
-              authToken={getAuthToken()}
               setGameLoading={setGameLoading}
               setSelectedGame={setSelectedGame}
               setScores={setScores}
-              setAuthToken={setAuthToken}
             />
           </div>
           <Button

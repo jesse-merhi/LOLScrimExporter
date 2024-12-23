@@ -1,7 +1,10 @@
 import { graphqlQuery, graphqlVariables } from '@/lib/constants';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import MoonLoader from 'react-spinners/MoonLoader';
 import InfiniteScroll from './ui/infinite-scroll';
+import { DateRange } from 'react-day-picker';
+import { GameStats } from '@/lib/types/gameStats';
+import { getAuthToken } from '@/lib/utils';
 
 // Type for a single player
 export interface Player {
@@ -48,7 +51,19 @@ export interface SeriesState {
   }[];
   games: Game[];
 }
-
+export interface SeriesStateWithId extends SeriesState {
+  id: number;
+}
+export interface FilterConfig {
+  dateRange: DateRange;
+  wins: boolean;
+  losses: boolean;
+  patch: string;
+  championsPicked: { value: string; label: string }[];
+  championsBanned: { value: string; label: string }[];
+  teams: { value: string; label: string }[];
+  players: { value: string; label: string }[];
+}
 // Type for the series details response
 export interface SeriesDetailsResponse {
   data: {
@@ -56,36 +71,78 @@ export interface SeriesDetailsResponse {
   };
 }
 function SidebarLoader(props: {
-  authToken: string;
   setGameLoading: (gameLoading: boolean) => void;
   setSelectedGame: (id: string | null) => void;
   setScores: (scores: number[]) => void;
-  setAuthToken: (authToken: string | null) => void;
 }) {
-  const authToken = props.authToken;
   const [seriesData, setSeriesData] = useState<any[]>([]);
   const [endCursor, setEndCursor] = useState<string | null>(null);
+  const [fetchedIds, setFetchedIds] = useState<number[]>([]);
   const [seriesDetails, setSeriesDetails] = useState<Record<
     string,
     SeriesState
   > | null>(null);
   const [isFetching, setIsFetching] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+
+  const [filters, setFilters] = useState<FilterConfig | null>(null);
+  const fetchFilters = () => {
+    // Load filters from localStorage on mount
+    const filterConfigStr = localStorage.getItem('filterConfig');
+    if (filterConfigStr) {
+      const filterConfig: FilterConfig = JSON.parse(filterConfigStr);
+      setSeriesData([]);
+      setSeriesDetails(null);
+      setFilters(filterConfig);
+      setFetchedIds([]);
+      setHasMore(true);
+    }
+  };
+  useEffect(() => {
+    const handleFiltersUpdate = () => {
+      fetchFilters();
+      // Trigger re-fetch for series data
+      fetchSeries();
+    };
+    handleFiltersUpdate();
+    // Listen for `filtersUpdated` events
+    window.addEventListener('filtersUpdated', handleFiltersUpdate);
+
+    return () => {
+      window.removeEventListener('filtersUpdated', handleFiltersUpdate);
+    };
+  }, []);
+
   const clearTokens = () => {
-    localStorage.removeItem('authToken');
-    props.setAuthToken(null);
+    localStorage.removeItem('getAuthToken()');
     localStorage.removeItem('refreshToken');
     document.location.reload();
   };
   const fetchSeries = async () => {
-    console.log('FGETCHING');
+    console.log('fetchingSeries');
+    if (!filters) return; // Wait for filters to load
     try {
       setIsFetching(true);
+      console.log('fetch');
+
+      const teamIds =
+        filters.teams.length > 0
+          ? filters.teams.map((team) => team.value)
+          : undefined; // undefined means no filtering in GraphQL
+
+      const livePlayerIds =
+        filters.players.length > 0
+          ? filters.players.map((player) => player.value)
+          : undefined; // undefined means no filtering in GraphQL
+
+      const windowStartTime =
+        filters.dateRange?.from || new Date(2020, 0, 1).toISOString();
+      const windowEndTime = filters.dateRange?.to || new Date().toISOString();
 
       const response = await fetch('https://api.grid.gg/central-data/graphql', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${authToken}`,
+          Authorization: `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -93,14 +150,19 @@ function SidebarLoader(props: {
           variables: {
             ...graphqlVariables,
             after: endCursor,
+            windowStartTime,
+            windowEndTime,
+            teamIds,
+            livePlayerIds,
           },
           query: graphqlQuery,
         }),
       });
-
       if (response.status == 401) {
         setIsFetching(false);
+        setHasMore(false);
         clearTokens();
+        return;
       }
       if (!response.ok) {
         console.error(
@@ -108,6 +170,7 @@ function SidebarLoader(props: {
           response.statusText
         );
         setIsFetching(false);
+        setHasMore(false);
         return;
       }
 
@@ -119,10 +182,12 @@ function SidebarLoader(props: {
           historicalData.data.allSeries
         )
       ) {
+        console.error('Couldnt Get historical Data');
         setIsFetching(false);
-        clearTokens();
+        setHasMore(false);
         return;
       }
+
       const { edges: seriesEdges, pageInfo } = historicalData.data.allSeries;
 
       const seriesIds = seriesEdges.map(
@@ -132,46 +197,51 @@ function SidebarLoader(props: {
       if (seriesIds.length === 0) {
         console.warn('No series found in the historical data.');
         setIsFetching(false);
+        setHasMore(false);
         return;
       }
 
       // Fetch series details
       const seriesDetailsPromises = seriesIds.map(async (id: number) => {
+        if (fetchedIds.includes(id)) {
+          setIsFetching(false);
+          setHasMore(false);
+          return;
+        }
         const detailResponse = await fetch(
           'https://api.grid.gg/live-data-feed/series-state/graphql',
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${authToken}`,
+              Authorization: `Bearer ${getAuthToken()}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               operationName: 'GetSeriesPlayersAndResults',
               variables: { id },
               query: `
-                  query GetSeriesPlayersAndResults($id: ID!) {
-                    seriesState(id: $id) {
-                      title {
-                        nameShortened
-                      }
-                      finished
-                      teams {
+                query GetSeriesPlayersAndResults($id: ID!) {
+                  seriesState(id: $id) {
+                    title {
+                      nameShortened
+                    }
+                    finished
+                    teams {
+                      id
+                      score
+                      players {
                         id
-                        score
-                        players {
-                          id
-                          name
-                        }
+                        name
                       }
                     }
                   }
-                `,
+                }
+              `,
             }),
           }
         );
         if (detailResponse.status == 401) {
-          setIsFetching(false);
-          props.setAuthToken(null);
+          return null;
         }
 
         if (!detailResponse.ok) {
@@ -183,23 +253,119 @@ function SidebarLoader(props: {
         }
 
         const data: SeriesDetailsResponse = await detailResponse.json();
-        return { [id]: data.data.seriesState };
-      });
+        // Fetch game summary for champion filtering
+        const gameSummaryResponse = await fetch(
+          `https://api.grid.gg/file-download/end-state/riot/series/${id}/games/1/summary`,
+          {
+            headers: {
+              Authorization: `Bearer ${getAuthToken()}`,
+            },
+          }
+        );
 
-      const resolvedSeriesDetails = await Promise.all(seriesDetailsPromises);
+        if (!gameSummaryResponse.ok) {
+          console.error(
+            `Failed to fetch game summary for series ID ${id}:`,
+            gameSummaryResponse.statusText
+          );
+          return null;
+        }
+
+        const gameSummaryData = await gameSummaryResponse.json();
+        const patch: string = gameSummaryData.gameVersion;
+        const participants = gameSummaryData.participants as GameStats[];
+
+        return {
+          seriesState: { ...data.data.seriesState, id },
+          participants,
+          patch,
+        };
+      });
+      const resolvedSeriesDetails: Array<{
+        patch: string;
+        participants: GameStats[];
+        seriesState: SeriesStateWithId;
+      } | null> = await Promise.all(seriesDetailsPromises);
       const validSeriesDetails = resolvedSeriesDetails.filter(
         (detail) => detail !== null
       );
 
-      // Update state
-      setSeriesData((prevData) => [...prevData, ...seriesEdges]);
+      // Apply client-side filters
+      var isEarlierPatch = false;
+      const filteredSeriesDetails = validSeriesDetails.filter((detail) => {
+        const { seriesState, participants, patch } = detail;
+        if (filters.patch && !filters.patch.startsWith(patch)) {
+          console.log(filters.patch, '+', patch);
+          if (patch < filters.patch) {
+            isEarlierPatch = true;
+          }
+          return false;
+        }
+        if (seriesState && seriesState.teams) {
+          // Filter by wins/losses
+          if (
+            filters.wins &&
+            !seriesState.teams.some((team) => team.score > 0)
+          ) {
+            return false;
+          }
+          if (
+            filters.losses &&
+            !seriesState.teams.some((team) => team.score === 0)
+          ) {
+            return false;
+          }
+        }
+        // Filter by champions picked
+        if (filters.championsPicked.length > 0) {
+          const pickedChampionIds = filters.championsPicked.map((c) => c.label);
+          const pickedInGame = participants.some((participant) =>
+            pickedChampionIds.includes(participant.championName)
+          );
+          if (!pickedInGame) {
+            return false;
+          }
+        }
+
+        // Filter by champions banned (if available)
+        if (filters.championsBanned.length > 0) {
+          const bannedChampionIds = filters.championsBanned.map((c) => c.label);
+          const bannedInGame = participants.some((participant) =>
+            bannedChampionIds.includes(participant.championName)
+          );
+          if (!bannedInGame) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+      if (isEarlierPatch) {
+        setIsFetching(false);
+        setHasMore(false);
+        return;
+      }
+      // Update filtered series and details
+      const filteredSeriesEdges = seriesEdges.filter((edge) =>
+        filteredSeriesDetails.some(
+          (detail) => detail.seriesState.id === edge.node.id
+        )
+      );
+
+      setSeriesData((prevData) => [...prevData, ...filteredSeriesEdges]);
       setSeriesDetails((prevDetails) => ({
         ...prevDetails,
-        ...Object.assign({}, ...validSeriesDetails),
+        ...Object.assign(
+          {},
+          ...filteredSeriesDetails.map((d) => ({
+            [d.seriesState.id]: d.seriesState,
+          }))
+        ),
       }));
 
       setHasMore(pageInfo.hasNextPage);
       setEndCursor(pageInfo.endCursor);
+      setFetchedIds((prev) => [...prev, ...seriesIds]);
       setIsFetching(false);
     } catch (error) {
       console.error('Error fetching series:', error);
@@ -255,7 +421,8 @@ function SidebarLoader(props: {
             </div>
           );
         })}
-      {hasMore && (
+
+      {isFetching && (
         <div className='h-12 w-full  text-accent flex justify-center items-center p-2'>
           <MoonLoader size={25} color='white' />
         </div>

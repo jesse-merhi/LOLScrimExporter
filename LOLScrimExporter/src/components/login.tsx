@@ -1,15 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 import { Button } from './ui/button';
+import { storeRefreshToken, storeAuthToken } from '@/lib/utils';
 
 function Login({
-  setAuthToken,
-  storeRefreshToken,
-  storeAuthToken,
+  setReloadKey,
 }: {
-  setAuthToken: (authToken: string) => void;
-  storeRefreshToken: (refreshToken: string) => void;
-  storeAuthToken: (authToken: string) => void;
+  setReloadKey: React.Dispatch<React.SetStateAction<number>>;
 }) {
   const [username, setUsername] = useState(
     import.meta.env.PROD ? '' : import.meta.env.VITE_USERNAME
@@ -28,12 +25,12 @@ function Login({
         .find((value) => value.startsWith(' RefreshToken='));
 
       if (authTokenExtract && refreshTokenExtract) {
-        setAuthToken(authTokenExtract.replace('Authorization=', '').trim());
         storeRefreshToken(
           refreshTokenExtract.replace(' RefreshToken=', '').trim()
         );
         storeAuthToken(authTokenExtract.replace('Authorization=', '').trim());
       }
+      setReloadKey((prev: number) => prev + 1);
     } catch (error) {
       console.error('Login failed:', error);
     }
