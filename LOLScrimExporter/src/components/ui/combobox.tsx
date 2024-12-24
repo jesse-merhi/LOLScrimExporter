@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { cn } from '@/lib/utils';
-import { Check, ChevronsUpDown } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Button } from './button';
+import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { useState } from "react";
+import { Button } from "./button";
 import {
   Command,
   CommandEmpty,
@@ -11,8 +11,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from './command';
-import { Popover, PopoverContent, PopoverTrigger } from './popover';
+} from "./command";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 
 interface ComboboxProps {
   options: { value: string; label: string }[];
@@ -26,7 +26,7 @@ export function Combobox({
   options,
   value,
   onChange,
-  placeholder = 'Select...',
+  placeholder = "Select...",
   id,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
@@ -35,19 +35,19 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant='outline'
-          role='combobox'
+          variant="outline"
+          role="combobox"
           id={id}
           aria-expanded={open}
-          className='w-[200px] justify-between'
+          className="w-[200px] justify-between"
         >
           {(value &&
             options.find((option) => option.value.startsWith(value))?.label) ||
             placeholder}
-          <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className='w-[200px] p-0'>
+      <PopoverContent className="w-[200px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={`Search ${placeholder.toLowerCase()}...`}
@@ -60,14 +60,14 @@ export function Combobox({
                   key={String(option.value)}
                   value={String(option.value)}
                   onSelect={() => {
-                    onChange(value === option.value ? '' : option.value);
+                    onChange(value === option.value ? "" : option.value);
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-4 w-4',
-                      value === option.value ? 'opacity-100' : 'opacity-0'
+                      "mr-2 h-4 w-4",
+                      value === option.value ? "opacity-100" : "opacity-0"
                     )}
                   />
                   {option.label}

@@ -1,17 +1,13 @@
-import { GameStats, gameStatsKeys } from '@/lib/types/gameStats';
+import { GameStats, gameStatsKeys } from "@/lib/types/gameStats";
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-
-import { Label } from './ui/label';
-import { useState } from 'react';
-import { ScrollArea } from './ui/scroll-area';
+} from "@/components/ui/table";
+import { ScrollArea } from "./ui/scroll-area";
 /*
 damageDealtToObjectives: 6854,
 damageDealtToTurrets: 5291,
@@ -100,29 +96,29 @@ perks: {
 function Stats({ gameSummary }: { gameSummary: GameStats[] }) {
   function camelCaseToSentence(input: string): string {
     return input
-      .replace(/([a-z])([A-Z])/g, '$1 $2') // Insert space before capital letters
-      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2') // Handle consecutive capitals
+      .replace(/([a-z])([A-Z])/g, "$1 $2") // Insert space before capital letters
+      .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2") // Handle consecutive capitals
       .replace(/^./, (str) => str.toUpperCase()); // Capitalize the first letter
   }
   return (
-    <ScrollArea className='h-full rounded-md border'>
+    <ScrollArea className="h-full rounded-md border">
       <Table>
-        <TableHeader className='sticky top-0 z-[100] bg-gray-100'>
-          <TableRow className=''>
-            <TableHead className='w-[100px] '>
-              <div className='flex items-end justify-start pb-2 h-full w-full'>
+        <TableHeader className="sticky top-0 z-[100] bg-gray-100">
+          <TableRow className="">
+            <TableHead className="w-[100px] ">
+              <div className="flex items-end justify-start pb-2 h-full w-full">
                 Stat
               </div>
             </TableHead>
             {gameSummary.map((player, index) => (
               <TableHead
                 className={
-                  index == 4 ? 'border-l-gray-200 border-r-2  p-2' : 'p-2'
+                  index == 4 ? "border-l-gray-200 border-r-2  p-2" : "p-2"
                 }
               >
-                <div className='flex flex-col text-center items-center justify-center'>
+                <div className="flex flex-col text-center items-center justify-center">
                   <img
-                    className='h-10 w-10'
+                    className="h-10 w-10"
                     src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${player.championName}.png`}
                   />
                   {player.riotIdGameName}
@@ -133,21 +129,21 @@ function Stats({ gameSummary }: { gameSummary: GameStats[] }) {
             ))}
           </TableRow>
         </TableHeader>
-        <TableBody className=''>
+        <TableBody className="">
           {gameStatsKeys.map((stat: keyof GameStats) => (
             <TableRow>
-              <TableCell className='font-medium'>
+              <TableCell className="font-medium">
                 {camelCaseToSentence(stat)}
               </TableCell>
               {gameSummary.map((player, index) => (
                 <TableCell
                   className={
                     index == 4
-                      ? 'border-l-gray-200 border-r-2 text-center'
-                      : ' text-center'
+                      ? "border-l-gray-200 border-r-2 text-center"
+                      : " text-center"
                   }
                 >
-                  {parseInt(player[stat] as string).toLocaleString('en-US', {
+                  {parseInt(player[stat] as string).toLocaleString("en-US", {
                     maximumFractionDigits: 2,
                   })}
                 </TableCell>

@@ -6,11 +6,11 @@ import "./App.css";
 import Draft from "./components/draft";
 import Filter from "./components/filter";
 import Login from "./components/login";
-import SidebarLoader, { SeriesState } from "./components/sidebar-loader";
+import SidebarLoader from "./components/sidebar-loader";
 import Stats from "./components/stats";
 import Summary from "./components/summary";
 import { Button } from "./components/ui/button";
-import { getAuthToken, getRefreshToken } from "./lib/utils";
+import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
 // Filter
 // - Per TEAM
 // - Losses? Wins?
@@ -29,10 +29,6 @@ import { getAuthToken, getRefreshToken } from "./lib/utils";
 
 function App() {
   const [gameSummary, setGameSummary] = useState([]);
-  const [seriesDetails, setSeriesDetails] = useState<Record<
-    string,
-    SeriesState
-  > | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
@@ -89,7 +85,8 @@ function App() {
       fetchGameSummary();
     }
   }, [selectedGame]);
-  if (!reloadKey && !getAuthToken()) {
+  console.log(authIsExpired());
+  if (!reloadKey && (!getAuthToken() || authIsExpired())) {
     return <Login setReloadKey={setReloadKey} />;
   }
 

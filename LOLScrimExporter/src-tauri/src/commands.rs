@@ -1,5 +1,5 @@
 // src/commands.rs
-
+use std::collections::HashMap;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -48,6 +48,12 @@ pub struct FilterConfig {
     pub players: Vec<PlayerFilter>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GameSummary {
+    pub gameVersion:String,
+    pub participants: Vec<GameStats>,
+}
+
 // ==============================
 // Series Data Types
 // ==============================
@@ -65,7 +71,7 @@ pub struct Character {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeamInfo {
     pub baseInfo: Option<BaseInfo>,
 }
@@ -114,18 +120,8 @@ pub struct SeriesStateWithId {
     pub id: String,
     pub title: Title,
     pub finished: bool,
-    pub teams: Vec<SeriesTeam>
-}
-
-impl SeriesStateWithId {
-    pub fn from_series_state(series_state: SeriesState, id: String) -> Self {
-        Self {
-            id,
-            title: series_state.title,
-            finished: series_state.finished,
-            teams: series_state.teams
-        }
-    }
+    pub teams: Vec<SeriesTeam>,
+    pub startTimeScheduled: Option<String>,
 }
 
 
@@ -154,11 +150,49 @@ pub struct GameTeam {
     pub players: Vec<Player>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameStats {
+    pub damageDealtToObjectives: i64,
+    pub damageDealtToTurrets: i64,
+    pub detectorWardsPlaced: i64,
+    pub largestKillingSpree: i64,
+    pub largestMultiKill: i64,
+    pub magicDamageDealt: i64,
+    pub magicDamageDealtToChampions: i64,
+    pub magicDamageTaken: i64,
+    pub physicalDamageDealt: i64,
+    pub physicalDamageDealtToChampions: i64,
+    pub physicalDamageTaken: i64,
+    pub totalAllyJungleMinionsKilled: i64,
+    pub totalDamageDealt: i64,
+    pub totalDamageDealtToChampions: i64,
+    pub totalDamageShieldedOnTeammates: i64,
+    pub totalDamageTaken: i64,
+    pub totalEnemyJungleMinionsKilled: i64,
+    pub totalHeal: i64,
+    pub turretKills: i64,
+    pub turretTakedowns: i64,
+    pub visionScore: i64,
+    pub visionWardsBoughtInGame: i64,
+    pub wardsKilled: i64,
+    pub wardsPlaced: i64,
+    pub perks: Perks,
+    pub champLevel: i64,
+    pub riotIdGameName: String,
+    pub kills: i64,
+    pub deaths: i64,
+    pub assists: i64,
     pub championName: String,
+    pub item1: i64,
+    pub item2: i64,
+    pub item3: i64,
+    pub item4: i64,
+    pub item5: i64,
+    pub item6: i64,
+    pub item0: i64,
+    pub totalMinionsKilled: i64,
+    pub goldEarned: i64,
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyOrg {
     pub id: String,
@@ -201,16 +235,39 @@ pub struct TeamsFilterTeams {
 pub struct FilteredSeriesResult {
     pub filtered_series: Vec<SeriesStateWithId>,
     pub has_more: bool,
-    pub end_cursor: Option<String>,
+    pub endCursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FilteredSeriesDetail {
     pub series_state: SeriesStateWithId,
     pub participants: Vec<GameStats>,
-    pub patch: String,
+    pub patch: String
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PerkSelection {
+    pub perk: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PerkStyle {
+    pub description: String,
+    pub selections: Vec<PerkSelection>,
+    pub style: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StatPerks {
+    pub defense: i64,
+    pub flex: i64,
+    pub offense: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Perks {
+    pub statPerks: StatPerks,
+    pub styles: Vec<PerkStyle>,
+}
 // ==============================
 // Backend Command Implementation
 // ==============================
@@ -219,12 +276,12 @@ pub struct FilteredSeriesDetail {
 pub async fn fetch_and_process_series(
     filters: FilterConfig,
     auth_token: String,
-    end_cursor: Option<String>,
+    endCursor: Option<String>,
 ) -> Result<FilteredSeriesResult, String> {
     let client = Client::new();
     info!("Starting fetch_and_process_series command");
     info!("Filters: {:?}", filters);
-    info!("End Cursor: {:?}", end_cursor);
+    info!("End Cursor: {:?}", endCursor);
 
     // ==============================
     // Step 1: Fetch Historical Series
@@ -233,7 +290,7 @@ pub async fn fetch_and_process_series(
     let graphql_body = serde_json::json!({
         "operationName": "GetHistoricalSeries",
         "variables": {
-            "after": end_cursor,
+            "after": endCursor,
             "first":10,
             "types":["SCRIM"],
             "windowStartTime": filters.dateRange.from.clone().unwrap_or_else(|| "2020-01-01T00:00:00.000Z".to_string()),
@@ -294,11 +351,11 @@ pub async fn fetch_and_process_series(
                     nameShortened
                     }
                     teams {
-                    baseInfo {
-                        name
-                        logoUrl
-                        id
-                    }
+                        baseInfo {
+                            name
+                            logoUrl
+                            id
+                        }
                     }
                 }
                 }
@@ -306,8 +363,6 @@ pub async fn fetch_and_process_series(
             }
         "#
     });
-
-    info!("GraphQL query body: {}", graphql_body);
 
     // Send the request to fetch historical series
     let response = client
@@ -381,8 +436,7 @@ pub async fn fetch_and_process_series(
             return Err(format!("Failed to parse 'allSeries': {}", err));
         }
     };
-
-    info!("Fetched {} series entries", all_series.edges.len());
+    info!("Fetched {} series entries {:?}", all_series.edges.len(), all_series.edges);
 
     let series_edges = all_series.edges;
     let page_info = all_series.pageInfo.clone();
@@ -392,8 +446,15 @@ pub async fn fetch_and_process_series(
         return Ok(FilteredSeriesResult {
             filtered_series: Vec::new(),
             has_more: false,
-            end_cursor: page_info.endCursor,
+            endCursor: page_info.endCursor,
         });
+    }
+    let mut series_info_map: HashMap<String, (Option<String>, Vec<TeamInfo>)> = HashMap::new();
+    for edge in &series_edges {
+        let series_id = edge.node.id.clone();
+        let start_time_scheduled = edge.node.startTimeScheduled.clone();
+        let teams = edge.node.teams.clone();
+        series_info_map.insert(series_id, (start_time_scheduled, teams));
     }
 
     let series_ids: Vec<String> = series_edges.iter().map(|edge| edge.node.id.clone()).collect();
@@ -406,8 +467,8 @@ pub async fn fetch_and_process_series(
     let series_details_futures = series_ids.iter().map(|id| {
         let client_clone = client.clone();
         let auth_token_clone = auth_token.clone();
+        let series_info_map_clone = series_info_map.clone();
         async move {
-            info!("Fetching series state for ID: {}", id);
             // Fetch series state
             let series_state_body = serde_json::json!({
                 "operationName": "GetSeriesPlayersAndResults",
@@ -432,7 +493,6 @@ pub async fn fetch_and_process_series(
                 "#
             });
 
-            info!("Series state query body for ID {}: {}", id, series_state_body);
 
             let series_response = client_clone
                 .post("https://api.grid.gg/live-data-feed/series-state/graphql")
@@ -450,11 +510,6 @@ pub async fn fetch_and_process_series(
                 })
                 .ok()?;
 
-            info!(
-                "Received series state response for ID {} with status: {}",
-                id,
-                series_response.status()
-            );
 
             if !series_response.status().is_success() {
                 error!(
@@ -507,7 +562,6 @@ pub async fn fetch_and_process_series(
                 id
             );
 
-            info!("Fetching game summary from URL: {}", game_summary_url);
 
             let game_summary_response = client_clone
                 .get(&game_summary_url)
@@ -523,12 +577,6 @@ pub async fn fetch_and_process_series(
                 })
                 .ok()?;
 
-            info!(
-                "Received game summary response for ID {} with status: {}",
-                id,
-                game_summary_response.status()
-            );
-
             if !game_summary_response.status().is_success() {
                 error!(
                     "Failed to fetch game summary for ID {}: {}",
@@ -538,7 +586,7 @@ pub async fn fetch_and_process_series(
                 return None;
             }
 
-            let game_summary_data: Value = match game_summary_response.json().await {
+            let game_summary_data: GameSummary = match game_summary_response.json().await {
                 Ok(data) => {
                     info!("Successfully parsed game summary for ID {}", id);
                     data
@@ -553,26 +601,25 @@ pub async fn fetch_and_process_series(
             };
 
             let patch = game_summary_data
-                .get("gameVersion")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+                .gameVersion.clone();   
 
-            info!("Patch version for ID {}: {}", id, patch);
-
-            let participants = game_summary_data
-                .get("participants")
-                .and_then(|v| v.as_array())
-                .unwrap_or(&vec![])
-                .iter()
-                .filter_map(|p| p.get("championName").and_then(|c| c.as_str()).map(|c| GameStats {
-                    championName: c.to_string(),
-                }))
-                .collect::<Vec<GameStats>>();
-
-            info!("Participants for ID {}: {:?}", id, participants);
+            let participants: Vec<GameStats> = game_summary_data.participants.clone();
             
-            let series_state_with_id = SeriesStateWithId::from_series_state(series_details, id.to_string());
+            let (start_time_scheduled, initial_teams) = series_info_map_clone.get(id).unwrap_or(&(None, Vec::new())).clone();
+            // Construct the SeriesStateWithId, use the series_info_map to populate baseInfo and date
+            let series_state_with_id = SeriesStateWithId {
+                id: id.to_string(),
+                title: series_details.title,
+                finished: series_details.finished,
+                teams: series_details.teams.into_iter().map(|mut team| {
+                    // Find the matching team info to get baseInfo
+                    if let Some(initial_team) = initial_teams.iter().find(|t| t.baseInfo.as_ref().map_or(false, |bi| bi.id == team.id)) {
+                        team.baseInfo = initial_team.baseInfo.clone();
+                    }
+                    team
+                }).collect(),
+                startTimeScheduled: start_time_scheduled,
+            };
             Some(FilteredSeriesDetail {
                 series_state: series_state_with_id,
                 participants,
@@ -854,7 +901,7 @@ pub async fn fetch_and_process_series(
         return Ok(FilteredSeriesResult {
             filtered_series: Vec::new(),
             has_more: false,
-            end_cursor: page_info.endCursor,
+            endCursor: page_info.endCursor,
         });
     }
 
@@ -863,6 +910,7 @@ pub async fn fetch_and_process_series(
     // ==============================
 
     info!("Mapping filtered series details to SeriesNode");
+
 
     let filtered_series : Vec<SeriesStateWithId> = filtered_series_details.into_iter().map(|detail| detail.series_state.clone()).collect();
 
@@ -876,10 +924,12 @@ pub async fn fetch_and_process_series(
     // ==============================
 
     info!("Returning filtered series results");
+    info!("{:?}", all_series.pageInfo.hasNextPage.clone());
+    info!("{:?}", all_series.pageInfo.endCursor.clone());
 
     Ok(FilteredSeriesResult {
         filtered_series,
         has_more: all_series.pageInfo.hasNextPage,
-        end_cursor: all_series.pageInfo.endCursor,
+        endCursor: all_series.pageInfo.endCursor,
     })
 }

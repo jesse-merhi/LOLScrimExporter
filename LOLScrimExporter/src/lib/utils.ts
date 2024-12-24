@@ -1,10 +1,15 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-
+import { jwtDecode } from "jwt-decode";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-
+export const authIsExpired = () => {
+  const token = getAuthToken();
+  const decoded = jwtDecode(token);
+  const now = Date.now() / 1000;
+  return decoded.exp ? decoded.exp < now : false;
+}
 export const getAuthToken = () => localStorage.getItem('authToken') || '';
 export const getRefreshToken = () => localStorage.getItem('refreshToken') || '';
 export const storeAuthToken = (token: string) =>

@@ -1,10 +1,10 @@
 // src/components/SidebarLoader.tsx
 
-import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import MoonLoader from 'react-spinners/MoonLoader';
-import InfiniteScroll from './ui/infinite-scroll';
-import { FilterConfig, SeriesNode, FilteredSeriesResult } from '../lib/types';
+import React, { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import MoonLoader from "react-spinners/MoonLoader";
+import InfiniteScroll from "./ui/infinite-scroll";
+import { FilterConfig, SeriesNode, FilteredSeriesResult } from "../lib/types";
 
 interface SidebarLoaderProps {
   setGameLoading: (gameLoading: boolean) => void;
@@ -18,13 +18,13 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
   const [isFetching, setIsFetching] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<FilterConfig | null>(null);
-  const [authToken, setAuthToken] = useState<string>('');
+  const [authToken, setAuthToken] = useState<string>("");
 
   const [error, setError] = useState<string | null>(null);
 
   // Function to load filters from localStorage
   const loadFilters = () => {
-    const filterConfigStr = localStorage.getItem('filterConfig');
+    const filterConfigStr = localStorage.getItem("filterConfig");
     if (filterConfigStr) {
       try {
         const filterConfig: FilterConfig = JSON.parse(filterConfigStr);
@@ -33,24 +33,24 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
         setEndCursor(null);
         setHasMore(true);
       } catch (err) {
-        console.error('Failed to parse filterConfig from localStorage:', err);
-        setError('Failed to load filters.');
+        console.error("Failed to parse filterConfig from localStorage:", err);
+        setError("Failed to load filters.");
       }
     } else {
-      console.warn('No filterConfig found in localStorage.');
+      console.warn("No filterConfig found in localStorage.");
     }
   };
 
   // Function to get auth token
   const getAuthToken = () => {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem("authToken");
     if (token) {
       setAuthToken(token);
       return token;
     } else {
-      console.error('No authToken found in localStorage.');
-      setError('Authentication token missing.');
-      return '';
+      console.error("No authToken found in localStorage.");
+      setError("Authentication token missing.");
+      return "";
     }
   };
 
@@ -59,9 +59,9 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
     const handleFiltersUpdate = () => {
       loadFilters();
     };
-    window.addEventListener('filtersUpdated', handleFiltersUpdate);
+    window.addEventListener("filtersUpdated", handleFiltersUpdate);
     return () => {
-      window.removeEventListener('filtersUpdated', handleFiltersUpdate);
+      window.removeEventListener("filtersUpdated", handleFiltersUpdate);
     };
   }, []);
 
@@ -79,16 +79,16 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
   }, [filters]);
 
   const clearTokens = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("refreshToken");
     document.location.reload();
   };
 
   const fetchSeries = async () => {
     if (!filters) return;
     if (!authToken) {
-      console.error('Auth token is missing.');
-      setError('Authentication token missing.');
+      console.error("Auth token is missing.");
+      setError("Authentication token missing.");
       return;
     }
 
@@ -96,23 +96,25 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
     setError(null);
 
     try {
+      console.log("PASSING CURSOR", endCursor);
       const response: FilteredSeriesResult = await invoke(
-        'fetch_and_process_series',
+        "fetch_and_process_series",
         {
           filters,
           authToken,
-          end_cursor: endCursor,
+          endCursor,
         }
       );
+      console.log("NEW CURSOR", response.endCursor);
 
       setSeriesData((prevData) => [...prevData, ...response.filtered_series]);
       setHasMore(response.has_more);
-      setEndCursor(response.end_cursor);
+      setEndCursor(response.endCursor);
     } catch (err) {
-      console.error('Error fetching series data:', err);
-      setError('Failed to fetch series data.');
+      console.error("Error fetching series data:", err);
+      setError("Failed to fetch series data.");
       // Optionally, handle specific errors like unauthorized
-      if (typeof err === 'string' && err.includes('Unauthorized')) {
+      if (typeof err === "string" && err.includes("Unauthorized")) {
         clearTokens();
       }
     } finally {
@@ -137,7 +139,7 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
 
             return (
               <div
-                className='w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'
+                className="w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800"
                 key={id}
                 onClick={() => {
                   props.setSelectedGame(id.toString());
@@ -147,19 +149,19 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
               >
                 <div>
                   {startTimeScheduled
-                    ? new Date(startTimeScheduled).toLocaleString('en', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
+                    ? new Date(startTimeScheduled).toLocaleString("en", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
                       })
-                    : 'No Date'}
+                    : "No Date"}
                 </div>
-                <div className='h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800'>
+                <div className="h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800">
                   {team1.baseInfo && (
                     <img
                       src={team1.baseInfo.logoUrl}
-                      className='h-full'
-                      alt='Team 1'
+                      className="h-full"
+                      alt="Team 1"
                     />
                   )}
                   <div>
@@ -168,8 +170,8 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
                   {team2.baseInfo && (
                     <img
                       src={team2.baseInfo.logoUrl}
-                      className='h-full'
-                      alt='Team 2'
+                      className="h-full"
+                      alt="Team 2"
                     />
                   )}
                 </div>
@@ -179,12 +181,12 @@ const SidebarLoader: React.FC<SidebarLoaderProps> = (props) => {
         : !isFetching && <div>No series found.</div>}
 
       {isFetching && hasMore && (
-        <div className='h-12 w-full text-accent flex justify-center items-center p-2'>
-          <MoonLoader size={25} color='white' />
+        <div className="h-12 w-full text-accent flex justify-center items-center p-2">
+          <MoonLoader size={25} color="white" />
         </div>
       )}
 
-      {error && <div className='text-red-500'>{error}</div>}
+      {error && <div className="text-red-500">{error}</div>}
     </InfiniteScroll>
   );
 };

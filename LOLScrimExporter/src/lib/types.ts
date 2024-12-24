@@ -50,5 +50,5 @@ export interface BaseInfo {
 export interface FilteredSeriesResult {
   filtered_series: SeriesNode[];
   has_more: boolean;
-  end_cursor: string | null;
+  endCursor: string;
 }
