@@ -6,6 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 export const authIsExpired = () => {
   const token = getAuthToken();
+  if (!token) return true;
   const decoded = jwtDecode(token);
   const now = Date.now() / 1000;
   return decoded.exp ? decoded.exp < now : false;
