@@ -15,12 +15,16 @@ jobs:
         include:
           - platform: "macos-latest" # for Arm based macs (M1 and above).
             args: "--target aarch64-apple-darwin"
+            binaryName: "lolscrimexporter-macos-arm64"
           - platform: "macos-latest" # for Intel based macs.
             args: "--target x86_64-apple-darwin"
+            binaryName: "lolscrimexporter-macos-x64"
           - platform: "ubuntu-22.04" # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ""
+            binaryName: "lolscrimexporter-linux"
           - platform: "windows-latest"
             args: ""
+            binaryName: "lolscrimexporter-windows"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -64,3 +68,6 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          bundleIdentifier: "com.example.lolscrimexporter"
+          bundleVersion: "__VERSION__"
+          binaryName: ${{ matrix.binaryName }}
