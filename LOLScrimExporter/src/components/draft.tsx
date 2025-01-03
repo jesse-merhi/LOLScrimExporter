@@ -1,6 +1,8 @@
 import { getAuthToken } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { ScrollArea } from "./ui/scroll-area";
+import MoonLoader from "react-spinners/MoonLoader";
+import { Champion } from "@/lib/types/champions";
 
 export interface Draft {
   bans1Blue: string[];
@@ -52,9 +54,27 @@ export interface SentenceChunk {
   strikethrough: boolean;
 }
 
-function Draft({ selectedGame }: { selectedGame: string }) {
+function Draft({
+  selectedGame,
+  patch,
+}: {
+  selectedGame: string;
+  patch: string;
+}) {
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT);
-
+  const [champions, setChampions] = useState<Record<string, Champion> | null>(
+    null
+  );
+  useEffect(() => {
+    const fetchChamps = async () => {
+      const response = await fetch(
+        `https://ddragon.leagueoflegends.com/cdn/${patch}/data/en_US/champion.json`
+      );
+      const champs = await response.json();
+      setChampions(champs.data);
+    };
+    fetchChamps();
+  }, [patch]);
   const fetchEventLog = async () => {
     const authToken = getAuthToken();
     if (!authToken) {
@@ -110,8 +130,6 @@ function Draft({ selectedGame }: { selectedGame: string }) {
         (element) => element.node.type === "grid-validated-series"
       ) + 1;
     const validatedData = data.data.events.edges.slice(validated);
-    console.log(validatedData);
-    console.log("FOUND", validatedData);
 
     const parsedDraft = parseDraftOrder(validatedData);
 
@@ -150,11 +168,9 @@ function Draft({ selectedGame }: { selectedGame: string }) {
     let redPickIndex = 1;
 
     draftLog.forEach((e) => {
-      console.log(e);
       const [team, action, champion] = e.node.sentenceChunks.map(
         (chunk) => chunk.text
       );
-      console.log(team, action, champion);
 
       if (!blueTeam || !redTeam) {
         if (!blueTeam) blueTeam = team;
@@ -173,7 +189,6 @@ function Draft({ selectedGame }: { selectedGame: string }) {
         }
       } else if (action === "picked") {
         const currentPick = pickOrder[pickStage];
-        console.log(currentPick, pickStage);
         if (
           (team === blueTeam && currentPick.team === "blue") ||
           (team === redTeam && currentPick.team === "red")
@@ -203,35 +218,52 @@ function Draft({ selectedGame }: { selectedGame: string }) {
   useEffect(() => {
     fetchEventLog();
   }, [selectedGame]);
-
   if (!draft) {
-    return <></>;
+    return (
+      <div className="h-full w-full flex items-center justify-center text-center">
+        <h3>No draft data found.</h3>
+      </div>
+    );
   }
-
+  if (!champions) {
+    return <MoonLoader size={25} color="white" />;
+  }
+  const getChampionImage = (championName: string) => {
+    if (!champions) return null;
+    const champKey = Object.keys(champions).find(
+      (key) => champions[key].name === championName
+    );
+    return champKey ? champions[champKey].image.full : null;
+  };
+  const renderChampionImages = (championNames: string[], patch: string) => {
+    return championNames.map((champion) => {
+      const image = getChampionImage(champion);
+      return (
+        image && (
+          <img
+            key={champion}
+            className="h-14 w-14"
+            src={`https://ddragon.leagueoflegends.com/cdn/${patch}/img/champion/${image}`}
+            alt={champion}
+          />
+        )
+      );
+    });
+  };
   return (
-    <ScrollArea className="overflow-auto p-6 w-full  h-full">
+    <ScrollArea className="overflow-auto p-6 w-full h-full">
       {/* Ban Phase 1 */}
       <div className="mb-2">
         <h3 className="text-xl font-semibold mb-2">First Ban Phase</h3>
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="bg-blue-500 p-4 rounded-lg">
-            <div className="flex justify-center">
-              {draft.bans1Blue.map((champion) => (
-                <img
-                  className="h-14 w-14"
-                  src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-                />
-              ))}
+            <div className="flex justify-center h-14">
+              {renderChampionImages(draft.bans1Blue, patch)}
             </div>
           </div>
           <div className="bg-red-500 p-4 rounded-lg">
-            <div className="flex justify-center">
-              {draft.bans1Red.map((champion) => (
-                <img
-                  className="h-14 w-14"
-                  src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-                />
-              ))}
+            <div className="flex justify-center h-14">
+              {renderChampionImages(draft.bans1Red, patch)}
             </div>
           </div>
         </div>
@@ -241,33 +273,13 @@ function Draft({ selectedGame }: { selectedGame: string }) {
       <div className="mb-2">
         <h3 className="text-xl font-semibold mb-2">Pick Phase</h3>
         <div className="grid grid-cols-2 gap-4 text-center">
-          <div className="bg-blue-600 p-4 rounded-lg">
-            {draft.picks1Blue.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
-            {draft.picks2Blue.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
+          <div className="bg-blue-600 p-4 rounded-lg h-48">
+            {renderChampionImages(draft.picks1Blue, patch)}
+            {renderChampionImages(draft.picks2Blue, patch)}
           </div>
-          <div className="bg-red-600 p-4 rounded-lg flex flex-col justify-end items-end">
-            {draft.picks1Red.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
-            {draft.picks2Red.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
+          <div className="bg-red-600 p-4 rounded-lg flex flex-col justify-end items-end h-48">
+            {renderChampionImages(draft.picks1Red, patch)}
+            {renderChampionImages(draft.picks2Red, patch)}
           </div>
         </div>
       </div>
@@ -277,23 +289,13 @@ function Draft({ selectedGame }: { selectedGame: string }) {
         <h3 className="text-xl font-semibold mb-2">Second Ban Phase</h3>
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="bg-blue-500 p-4 rounded-lg">
-            <div className="flex justify-center">
-              {draft.bans2Blue.map((champion) => (
-                <img
-                  className="h-14 w-14"
-                  src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-                />
-              ))}
+            <div className="flex justify-center h-14">
+              {renderChampionImages(draft.bans2Blue, patch)}
             </div>
           </div>
-          <div className="bg-red-500 p-4 rounded-lg ">
-            <div className="flex justify-center">
-              {draft.bans2Red.map((champion) => (
-                <img
-                  className="h-14 w-14"
-                  src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-                />
-              ))}
+          <div className="bg-red-500 p-4 rounded-lg">
+            <div className="flex justify-center h-14">
+              {renderChampionImages(draft.bans2Red, patch)}
             </div>
           </div>
         </div>
@@ -303,27 +305,12 @@ function Draft({ selectedGame }: { selectedGame: string }) {
       <div>
         <h3 className="text-xl font-semibold mb-2">Final Pick Phase</h3>
         <div className="grid grid-cols-2 gap-4 text-center">
-          <div className="bg-blue-600 p-4 rounded-lg">
-            {draft.picks3Blue.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
+          <div className="bg-blue-600 p-4 rounded-lg h-36">
+            {renderChampionImages(draft.picks3Blue, patch)}
           </div>
-          <div className="bg-red-600 p-4 rounded-lg flex flex-col items-end justify-end">
-            {draft.picks3Red.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
-            {draft.picks4Red.map((champion) => (
-              <img
-                className="h-14 w-14"
-                src={`https://opgg-static.akamaized.net/meta/images/lol/latest/champion/${champion}.png`}
-              />
-            ))}
+          <div className="bg-red-600 p-4 rounded-lg flex flex-col items-end justify-end h-36">
+            {renderChampionImages(draft.picks3Red, patch)}
+            {renderChampionImages(draft.picks4Red, patch)}
           </div>
         </div>
       </div>

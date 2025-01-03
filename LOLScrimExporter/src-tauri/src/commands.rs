@@ -1,11 +1,11 @@
 // src/commands.rs
-use std::collections::HashMap;
+use futures::future::join_all;
+use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use tauri::command;
-use futures::future::join_all;
-use log::{info, warn, error};
 
 // ==============================
 // Filter Configuration Types
@@ -16,7 +16,6 @@ pub struct DateRange {
     pub from: Option<String>, // e.g., "2024-01-01T00:00:00.000Z"
     pub to: Option<String>,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChampionSelection {
@@ -50,7 +49,7 @@ pub struct FilterConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GameSummary {
-    pub gameVersion:String,
+    pub gameVersion: String,
     pub participants: Vec<GameStats>,
 }
 
@@ -81,7 +80,6 @@ pub struct BaseInfo {
     pub logoUrl: String,
     pub id: String,
     pub name: String,
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -112,7 +110,7 @@ pub struct AllSeries {
 pub struct SeriesState {
     pub title: Title,
     pub finished: bool,
-    pub teams: Vec<SeriesTeam>
+    pub teams: Vec<SeriesTeam>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -123,8 +121,6 @@ pub struct SeriesStateWithId {
     pub teams: Vec<SeriesTeam>,
     pub startTimeScheduled: Option<String>,
 }
-
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Title {
@@ -240,9 +236,11 @@ pub struct FilteredSeriesResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FilteredSeriesDetail {
+    // Make sure series_state -> seriesState
+    #[serde(rename = "seriesState")]
     pub series_state: SeriesStateWithId,
     pub participants: Vec<GameStats>,
-    pub patch: String
+    pub patch: String,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PerkSelection {
@@ -268,394 +266,9 @@ pub struct Perks {
     pub statPerks: StatPerks,
     pub styles: Vec<PerkStyle>,
 }
-// ==============================
-// Backend Command Implementation
-// ==============================
 
-#[command]
-pub async fn fetch_and_process_series(
-    filters: FilterConfig,
-    auth_token: String,
-    endCursor: Option<String>,
-) -> Result<FilteredSeriesResult, String> {
+pub async fn get_my_team_id(auth_token: String) -> Result<String, String> {
     let client = Client::new();
-    info!("Starting fetch_and_process_series command");
-    info!("Filters: {:?}", filters);
-    info!("End Cursor: {:?}", endCursor);
-
-    // ==============================
-    // Step 1: Fetch Historical Series
-    // ==============================
-
-    let graphql_body = serde_json::json!({
-        "operationName": "GetHistoricalSeries",
-        "variables": {
-            "after": endCursor,
-            "first":10,
-            "types":["SCRIM"],
-            "windowStartTime": filters.dateRange.from.clone().unwrap_or_else(|| "2020-01-01T00:00:00.000Z".to_string()),
-            "windowEndTime": filters.dateRange.to.clone().unwrap_or_else(|| "2100-01-01T00:00:00.000Z".to_string()),
-            "teamIds": if !filters.teams.is_empty() {
-                Some(filters.teams.iter().map(|t| t.value.clone()).collect::<Vec<String>>())
-            } else {
-                None
-            },
-            "livePlayerIds": if !filters.players.is_empty() {
-                Some(filters.players.iter().map(|p| p.value.clone()).collect::<Vec<String>>())
-            } else {
-                None
-            }
-        },
-        "query": r#"
-          query GetHistoricalSeries(
-            $windowStartTime: String!
-            $windowEndTime: String!
-            $after: Cursor
-            $first: Int
-            $livePlayerIds: [ID!]
-            $teamIds: [ID!]
-            $types: [SeriesType!]
-            ) {
-            allSeries(
-                filter: {
-                startTimeScheduled: { gte: $windowStartTime, lte: $windowEndTime }
-                livePlayerIds: { in: $livePlayerIds }
-                teamIds: { in: $teamIds }
-                types: $types
-                }
-                first: $first
-                after: $after
-                orderBy: StartTimeScheduled
-                orderDirection: DESC
-            ) {
-                totalCount
-                pageInfo {
-                hasPreviousPage
-                hasNextPage
-                startCursor
-                endCursor
-                }
-                edges {
-                node {
-                    id
-                    type
-                    title {
-                    name
-                    nameShortened
-                    }
-                    tournament {
-                    name
-                    }
-                    startTimeScheduled
-                    format {
-                    nameShortened
-                    }
-                    teams {
-                        baseInfo {
-                            name
-                            logoUrl
-                            id
-                        }
-                    }
-                }
-                }
-            }
-            }
-        "#
-    });
-
-    // Send the request to fetch historical series
-    let response = client
-        .post("https://api.grid.gg/central-data/graphql")
-        .header("Authorization", format!("Bearer {}", auth_token))
-        .header("Content-Type", "application/json")
-        .json(&graphql_body)
-        .send()
-        .await
-        .map_err(|err| {
-            error!("Network error while fetching historical series: {}", err);
-            format!("Network error: {}", err)
-        })?;
-
-    info!("Received response with status: {}", response.status());
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_body = match response.text().await {
-            Ok(body) => body,
-            Err(err) => format!("Failed to read error response body: {}", err),
-        };
-    
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            error!(
-                "Unauthorized access with provided auth token. Response body: {}",
-                error_body
-            );
-            return Err("Unauthorized: Invalid auth token".to_string());
-        }
-    
-        error!(
-            "Request failed with status: {}. Response body: {}",
-           status,
-            error_body
-        );
-        return Err(format!(
-            "Request failed with status: {}. Error details: {}",
-            status,
-            error_body
-        ));
-    }
-
-    let json_body: Value = match response.json().await {
-        Ok(body) => {
-            info!("Successfully parsed JSON body from historical series response");
-            body
-        }
-        Err(err) => {
-            error!("Failed to parse JSON from historical series response: {}", err);
-            return Err(format!("Failed to parse JSON: {}", err));
-        }
-    };
-
-
-    let all_series: AllSeries = match serde_json::from_value(
-        json_body
-            .pointer("/data/allSeries")
-            .cloned()
-            .ok_or_else(|| {
-                error!("Missing 'allSeries' key in response. Full response: {:?}", json_body);
-                "Missing 'allSeries' key in response".to_string()
-            })?,
-    ) {
-        Ok(series) => {
-            info!("Successfully deserialized all_series: {:?}", series);
-            series
-        }
-        Err(err) => {
-            error!("Failed to deserialize all_series: {}. Full response: {:?}", err, json_body);
-            return Err(format!("Failed to parse 'allSeries': {}", err));
-        }
-    };
-    info!("Fetched {} series entries {:?}", all_series.edges.len(), all_series.edges);
-
-    let series_edges = all_series.edges;
-    let page_info = all_series.pageInfo.clone();
-
-    if series_edges.is_empty() {
-        info!("No series found in the response");
-        return Ok(FilteredSeriesResult {
-            filtered_series: Vec::new(),
-            has_more: false,
-            endCursor: page_info.endCursor,
-        });
-    }
-    let mut series_info_map: HashMap<String, (Option<String>, Vec<TeamInfo>)> = HashMap::new();
-    for edge in &series_edges {
-        let series_id = edge.node.id.clone();
-        let start_time_scheduled = edge.node.startTimeScheduled.clone();
-        let teams = edge.node.teams.clone();
-        series_info_map.insert(series_id, (start_time_scheduled, teams));
-    }
-
-    let series_ids: Vec<String> = series_edges.iter().map(|edge| edge.node.id.clone()).collect();
-    info!("Series IDs fetched: {:?}", series_ids);
-
-    // ==============================
-    // Step 2: Fetch Series Details
-    // ==============================
-
-    let series_details_futures = series_ids.iter().map(|id| {
-        let client_clone = client.clone();
-        let auth_token_clone = auth_token.clone();
-        let series_info_map_clone = series_info_map.clone();
-        async move {
-            // Fetch series state
-            let series_state_body = serde_json::json!({
-                "operationName": "GetSeriesPlayersAndResults",
-                "variables": { "id": id },
-                "query": r#"
-                  query GetSeriesPlayersAndResults($id: ID!) {
-                      seriesState(id: $id) {
-                          title {
-                              nameShortened
-                          }
-                          finished
-                          teams {
-                              id
-                              score
-                              players {
-                                  id
-                                  name
-                              }
-                          }
-                      }
-                  }
-                "#
-            });
-
-
-            let series_response = client_clone
-                .post("https://api.grid.gg/live-data-feed/series-state/graphql")
-                .header("Authorization", format!("Bearer {}", auth_token_clone))
-                .header("Content-Type", "application/json")
-                .json(&series_state_body)
-                .send()
-                .await
-                .map_err(|err| {
-                    error!(
-                        "Failed to fetch series state for ID {}: {}",
-                        id, err
-                    );
-                    format!("Failed to fetch series state for ID {}: {}", id, err)
-                })
-                .ok()?;
-
-
-            if !series_response.status().is_success() {
-                error!(
-                    "Failed to fetch series state for ID {}: {} ",
-                    id,
-                    series_response.status()
-                );
-                return None;
-            }
-
-            let series_details: SeriesState = match series_response.json::<Value>().await {
-                Ok(json_data) => {
-                    // Extract the series state from body.data.seriesState
-                    if let Some(series_state_value) = json_data.pointer("/data/seriesState") {
-                        match serde_json::from_value(series_state_value.clone()) {
-                            Ok(parsed_data) => {
-                                info!("Successfully parsed series state for ID {}", id);
-                                parsed_data
-                            }
-                            Err(err) => {
-                                error!(
-                                    "Failed to parse series state for ID {}: {}. Full response: {:?}",
-                                    id, err, series_state_value
-                                );
-                                return None;
-                            }
-                        }
-                    } else {
-                        error!(
-                            "Missing 'seriesState' in response for ID {}. Full response: {:?}",
-                            id, json_data
-                        );
-                        return None;
-                    }
-                }
-                Err(err) => {
-                    error!(
-                        "Failed to read series state response for ID {}: {}",
-                        id, err
-                    );
-                    return None;
-                }
-            };
-            
-            
-
-            // Fetch game summary
-            let game_summary_url = format!(
-                "https://api.grid.gg/file-download/end-state/riot/series/{}/games/1/summary",
-                id
-            );
-
-
-            let game_summary_response = client_clone
-                .get(&game_summary_url)
-                .header("Authorization", format!("Bearer {}", auth_token_clone))
-                .send()
-                .await
-                .map_err(|err| {
-                    error!(
-                        "Failed to fetch game summary for ID {}: {}",
-                        id, err
-                    );
-                    format!("Failed to fetch game summary for ID {}: {}", id, err)
-                })
-                .ok()?;
-
-            if !game_summary_response.status().is_success() {
-                error!(
-                    "Failed to fetch game summary for ID {}: {}",
-                    id,
-                    game_summary_response.status()
-                );
-                return None;
-            }
-
-            let game_summary_data: GameSummary = match game_summary_response.json().await {
-                Ok(data) => {
-                    info!("Successfully parsed game summary for ID {}", id);
-                    data
-                }
-                Err(err) => {
-                    error!(
-                        "Failed to parse game summary for ID {}: {}",
-                        id, err
-                    );
-                    return None;
-                }
-            };
-
-            let patch = game_summary_data
-                .gameVersion.clone();   
-
-            let participants: Vec<GameStats> = game_summary_data.participants.clone();
-            
-            let (start_time_scheduled, initial_teams) = series_info_map_clone.get(id).unwrap_or(&(None, Vec::new())).clone();
-            // Construct the SeriesStateWithId, use the series_info_map to populate baseInfo and date
-            let series_state_with_id = SeriesStateWithId {
-                id: id.to_string(),
-                title: series_details.title,
-                finished: series_details.finished,
-                teams: series_details.teams.into_iter().map(|mut team| {
-                    // Find the matching team info to get baseInfo
-                    if let Some(initial_team) = initial_teams.iter().find(|t| t.baseInfo.as_ref().map_or(false, |bi| bi.id == team.id)) {
-                        team.baseInfo = initial_team.baseInfo.clone();
-                    }
-                    team
-                }).collect(),
-                startTimeScheduled: start_time_scheduled,
-            };
-            Some(FilteredSeriesDetail {
-                series_state: series_state_with_id,
-                participants,
-                patch,
-            })
-        }
-    });
-
-    info!("Initiating concurrent fetches for series details");
-
-    // Await all series details concurrently
-    let series_details_results = join_all(series_details_futures).await;
-
-    info!("Completed fetching series details");
-
-    // Collect valid series details
-    let mut valid_series_details = Vec::new();
-
-    for detail in series_details_results {
-        if let Some(detail) = detail {
-            valid_series_details.push(detail);
-        }
-    }
-
-    info!(
-        "Collected {} valid series details after filtering failed or incomplete fetches",
-        valid_series_details.len()
-    );
-
-    // ==============================
-    // Step 3: Fetch User's Team ID
-    // ==============================
-
-    info!("Fetching user's organization info to retrieve team name");
-
-    // Fetch my organization info to get my team name
     let org_response = client
         .get("https://lol.grid.gg/api/organisations/mine")
         .header("Authorization", format!("Bearer {}", auth_token))
@@ -665,23 +278,6 @@ pub async fn fetch_and_process_series(
             error!("Failed to fetch organization info: {}", err);
             format!("Failed to fetch organization info: {}", err)
         })?;
-
-    info!(
-        "Received organization info response with status: {}",
-        org_response.status()
-    );
-
-    if !org_response.status().is_success() {
-        error!(
-            "Failed to fetch organization info: {}",
-            org_response.status()
-        );
-        return Err(format!(
-            "Failed to fetch organization info: {}",
-            org_response.status()
-        ));
-    }
-
     let my_org: MyOrg = match org_response.json().await {
         Ok(data) => {
             info!("Successfully parsed organization info: {:?}", data);
@@ -692,244 +288,183 @@ pub async fn fetch_and_process_series(
             return Err(format!("Failed to parse organization info: {}", err));
         }
     };
-
     let my_team_name = my_org.name;
     info!("User's team name: {}", my_team_name);
 
     // Fetch team ID by name
-    let teams_result = {
-        // Build GraphQL request to fetch teams by name
-        let teams_filter_body = serde_json::json!({
+    let team_id_response = client
+        .post("https://api.grid.gg/central-data/graphql")
+        .header("Authorization", format!("Bearer {}", auth_token))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
             "operationName": "GetTeamsFilter",
             "variables": {
-                "first": 50,
+                "first": 1,
                 "name": { "contains": my_team_name }
             },
             "query": r#"
-              query GetTeamsFilter($name: StringFilter, $first: Int) {
-                  teams(filter: { name: $name }, first: $first) {
-                      edges {
-                          node {
-                              id
-                              name
-                              logoUrl
-                          }
-                      }
-                  }
-              }
+            query GetTeamsFilter($name: StringFilter, $first: Int) {
+                teams(filter: { name: $name }, first: $first) {
+                    edges {
+                        node {
+                            id
+                            name
+                            logoUrl
+                        }
+                    }
+                }
+            }
             "#
-        });
-
-        info!("GraphQL query body for fetching teams: {}", teams_filter_body);
-
-        let teams_response = client
-            .post("https://api.grid.gg/central-data/graphql")
-            .header("Authorization", format!("Bearer {}", auth_token))
-            .header("Content-Type", "application/json")
-            .json(&teams_filter_body)
-            .send()
-            .await
-            .map_err(|err| {
-                error!(
-                    "Failed to fetch teams by name '{}': {}",
-                    my_team_name, err
-                );
-                format!(
-                    "Failed to fetch teams by name '{}': {}",
-                    my_team_name, err
-                )
-            })?;
-
-        info!(
-            "Received teams filter response with status: {}",
-            teams_response.status()
-        );
-
-        if !teams_response.status().is_success() {
+        }))
+        .send()
+        .await
+        .map_err(|err| {
             error!(
-                "Failed to fetch teams by name '{}': {}",
-                my_team_name,
-                teams_response.status()
+                "Failed to fetch team ID by name '{}': {}",
+                my_team_name, err
             );
-            return Err(format!(
-                "Failed to fetch teams by name '{}': {}",
-                my_team_name,
-                teams_response.status()
-            ));
+            format!(
+                "Failed to fetch team ID by name '{}': {}",
+                my_team_name, err
+            )
+        })?;
+    let team_id_response_json: TeamsFilterResponse = match team_id_response.json().await {
+        Ok(data) => {
+            info!("Successfully parsed team ID response");
+            data
         }
-
-        let teams_filter_resp: TeamsFilterResponse = match teams_response.json().await {
-            Ok(data) => {
-                info!("Successfully parsed teams filter response");
-                data
-            }
-            Err(err) => {
-                error!("Failed to parse teams filter response: {}", err);
-                return Err(format!("Failed to parse teams filter response: {}", err));
-            }
-        };
-
-        let teams: Vec<TeamInfoShort> = teams_filter_resp
-            .data
-            .teams
-            .edges
-            .into_iter()
-            .map(|edge| edge.node)
-            .collect();
-
-        info!("Fetched teams: {:?}", teams);
-
-        if teams.is_empty() {
-            warn!("No teams found matching the name '{}'", my_team_name);
-            None
-        } else {
-            info!("Found team ID: {}", teams[0].id);
-            Some(teams[0].id.clone())
+        Err(err) => {
+            error!("Failed to parse team ID response: {}", err);
+            return Err(format!("Failed to parse team ID response: {}", err));
         }
     };
+    let teams: Vec<TeamInfoShort> = team_id_response_json
+        .data
+        .teams
+        .edges
+        .into_iter()
+        .map(|edge| edge.node)
+        .collect();
+    if teams.is_empty() {
+        warn!("No teams found matching the name '{}'", my_team_name);
+        return Err(format!(
+            "No teams found matching the name '{}'",
+            my_team_name
+        ));
+    }
+    let team_id = teams[0].id.clone();
+    info!("Found team ID: {}", team_id);
+    Ok(team_id.to_string())
+}
 
-    let my_team_id = teams_result;
-    info!("User's team ID: {:?}", my_team_id);
-
-    // ==============================
-    // Step 4: Apply All Filters
-    // ==============================
-
+#[command]
+pub async fn filter_series(
+    series_details: Vec<FilteredSeriesDetail>,
+    filters: FilterConfig,
+    auth_token: String,
+) -> Result<Vec<FilteredSeriesDetail>, String> {
+    // Get user's team ID if wins/losses filter is enabled
+    let mut my_team_id: Option<String> = None;
+    if filters.wins || filters.losses {
+        my_team_id = Some(get_my_team_id(auth_token.clone()).await?);
+    }
     let mut is_earlier_patch = false;
+    let filtered_series_details = series_details
+        .into_iter()
+        .filter(|detail| {
+            let series_state = &detail.series_state;
+            let participants = &detail.participants;
+            let patch = &detail.patch;
 
-    info!("Applying filters to the fetched series details");
-
-    let filtered_series_details = valid_series_details.into_iter().filter(|detail| {
-        let series_state = &detail.series_state;
-        let participants = &detail.participants;
-        let patch = &detail.patch;
-
-        // ---- Filter by Patch ----
-        if !filters.patch.is_empty() {
-            if !patch.starts_with(&filters.patch) {
-                if patch < &filters.patch {
-                    is_earlier_patch = true;
-                    info!(
-                        "Series ID {} excluded due to earlier patch: {} < {}",
-                        series_state.id, patch, filters.patch
-                    );
-                } else {
-                    info!(
+            // ---- Filter by Patch ----
+            if !filters.patch.is_empty() {
+                if !patch.starts_with(&filters.patch) {
+                    if patch < &filters.patch {
+                        is_earlier_patch = true;
+                        info!(
+                            "Series ID {} excluded due to earlier patch: {} < {}",
+                            series_state.id, patch, filters.patch
+                        );
+                    } else {
+                        info!(
                         "Series ID {} excluded due to patch mismatch: {} does not start with {}",
                         series_state.id, patch, filters.patch
                     );
+                    }
+                    return false;
                 }
-                return false;
             }
-        }
 
-        // ---- Filter by Wins/Losses ----
-        if filters.wins || filters.losses {
-            if series_state.teams.len() >= 2 && my_team_id.is_some() {
-                let my_team_id_ref = my_team_id.as_ref().unwrap();
-                let team1 = &series_state.teams[0];
-                let team2 = &series_state.teams[1];
+            // ---- Filter by Wins/Losses ----
+            if filters.wins || filters.losses {
+                if series_state.teams.len() >= 2 && my_team_id.is_some() {
+                    let my_team_id_ref = my_team_id.as_ref().unwrap();
+                    let team1 = &series_state.teams[0];
+                    let team2 = &series_state.teams[1];
 
-                let is_team1 = &team1.id == my_team_id_ref;
-                let is_team2 = &team2.id == my_team_id_ref;
+                    let is_team1 = &team1.id == my_team_id_ref;
+                    let is_team2 = &team2.id == my_team_id_ref;
 
-                let my_team_won = (is_team1 && team1.score >= team2.score)
-                    || (is_team2 && team2.score >= team1.score);
-                let my_team_lost = (is_team1 && team1.score < team2.score)
-                    || (is_team2 && team2.score < team1.score);
+                    let my_team_won = (is_team1 && team1.score >= team2.score)
+                        || (is_team2 && team2.score >= team1.score);
+                    let my_team_lost = (is_team1 && team1.score < team2.score)
+                        || (is_team2 && team2.score < team1.score);
 
-                let show_wins = filters.wins && my_team_won;
-                let show_losses = filters.losses && my_team_lost;
+                    let show_wins = filters.wins && my_team_won;
+                    let show_losses = filters.losses && my_team_lost;
 
-                if !(show_wins || show_losses) {
+                    if !(show_wins || show_losses) {
+                        info!(
+                            "Series ID {} excluded based on win/loss filters",
+                            series_state.id
+                        );
+                        return false;
+                    }
+                }
+            }
+
+            // ---- Filter by Champions Picked ----
+            if !filters.championsPicked.is_empty() {
+                let picked_champions: Vec<String> = filters
+                    .championsPicked
+                    .iter()
+                    .map(|c| c.label.clone())
+                    .collect();
+                let picked_in_game = participants
+                    .iter()
+                    .any(|p| picked_champions.contains(&p.championName));
+                if !picked_in_game {
                     info!(
-                        "Series ID {} excluded based on win/loss filters",
+                        "Series ID {} excluded because no picked champions were found in the game",
                         series_state.id
                     );
                     return false;
                 }
             }
-        }
 
-        // ---- Filter by Champions Picked ----
-        if !filters.championsPicked.is_empty() {
-            let picked_champions: Vec<String> = filters
-                .championsPicked
-                .iter()
-                .map(|c| c.label.clone())
-                .collect();
-            let picked_in_game =
-                participants.iter().any(|p| picked_champions.contains(&p.championName));
-            if !picked_in_game {
-                info!(
-                    "Series ID {} excluded because no picked champions were found in the game",
-                    series_state.id
-                );
-                return false;
+            // ---- Filter by Champions Banned ----
+            if !filters.championsBanned.is_empty() {
+                let banned_champions: Vec<String> = filters
+                    .championsBanned
+                    .iter()
+                    .map(|c| c.label.clone())
+                    .collect();
+                let banned_in_game = participants
+                    .iter()
+                    .any(|p| banned_champions.contains(&p.championName));
+                info!("Banned in game: {}", banned_in_game);
+                info!("Banned champions: {:?}", banned_champions);
+                if banned_in_game {
+                    info!(
+                        "Series ID {} excluded because banned champions were found in the game",
+                        series_state.id
+                    );
+                    return false;
+                }
             }
-        }
 
-        // ---- Filter by Champions Banned ----
-        if !filters.championsBanned.is_empty() {
-            let banned_champions: Vec<String> = filters
-                .championsBanned
-                .iter()
-                .map(|c| c.label.clone())
-                .collect();
-            let banned_in_game =
-                participants.iter().any(|p| banned_champions.contains(&p.championName));
-            if !banned_in_game {
-                info!(
-                    "Series ID {} excluded because no banned champions were found in the game",
-                    series_state.id
-                );
-                return false;
-            }
-        }
-
-        true
-    }).collect::<Vec<FilteredSeriesDetail>>();
-
-    info!(
-        "Filtered series details count: {}",
-        filtered_series_details.len()
-    );
-
-    // If earlier patch and no results, stop pagination
-    if is_earlier_patch && filtered_series_details.is_empty() {
-        info!("Stopping pagination due to earlier patch and no results");
-        return Ok(FilteredSeriesResult {
-            filtered_series: Vec::new(),
-            has_more: false,
-            endCursor: page_info.endCursor,
-        });
-    }
-
-    // ==============================
-    // Step 5: Map to SeriesNode
-    // ==============================
-
-    info!("Mapping filtered series details to SeriesNode");
-
-
-    let filtered_series : Vec<SeriesStateWithId> = filtered_series_details.into_iter().map(|detail| detail.series_state.clone()).collect();
-
-    info!(
-        "Prepared {} SeriesNode entries to return",
-        filtered_series.len()
-    );
-
-    // ==============================
-    // Step 6: Return Filtered Results
-    // ==============================
-
-    info!("Returning filtered series results");
-    info!("{:?}", all_series.pageInfo.hasNextPage.clone());
-    info!("{:?}", all_series.pageInfo.endCursor.clone());
-
-    Ok(FilteredSeriesResult {
-        filtered_series,
-        has_more: all_series.pageInfo.hasNextPage,
-        endCursor: all_series.pageInfo.endCursor,
-    })
+            true
+        })
+        .collect::<Vec<FilteredSeriesDetail>>();
+    Ok(filtered_series_details)
 }

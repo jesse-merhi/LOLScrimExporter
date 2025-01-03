@@ -30,6 +30,7 @@ import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
 function App() {
   const [gameSummary, setGameSummary] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedPatch, setSelectedPatch] = useState<string>("");
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState<number[]>([0, 0]);
@@ -103,6 +104,7 @@ function App() {
               setGameLoading={setGameLoading}
               setSelectedGame={setSelectedGame}
               setScores={setScores}
+              setSelectedPatch={setSelectedPatch}
             />
           </div>
           <Button
@@ -124,17 +126,19 @@ function App() {
                 <TabsTrigger value="stats">Stats</TabsTrigger>
                 <TabsTrigger value="draft">Draft</TabsTrigger>
               </TabsList>
-              <TabsContent
-                value="summary"
-                className="bg-blue-50  w-full  h-[95%]"
-              >
-                <Summary gameSummary={gameSummary} scores={scores} />
+              <TabsContent value="summary" className="w-full  h-[95%]">
+                <Summary
+                  gameSummary={gameSummary}
+                  patch={selectedPatch}
+                  scores={scores}
+                  gameId={selectedGame}
+                />
               </TabsContent>
               <TabsContent value="stats" className="h-[95%] w-full">
-                <Stats gameSummary={gameSummary} />
+                <Stats gameSummary={gameSummary} patch={selectedPatch} />
               </TabsContent>
               <TabsContent value="draft" className="h-full w-full">
-                <Draft selectedGame={selectedGame} />
+                <Draft selectedGame={selectedGame} patch={selectedPatch} />
               </TabsContent>
             </Tabs>
           ) : (

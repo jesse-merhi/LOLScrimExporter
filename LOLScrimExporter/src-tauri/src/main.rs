@@ -1,11 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod commands;
-use serde_json::json;
-use tauri::command;
-use log::LevelFilter;
 use env_logger::Builder;
+use log::LevelFilter;
+use serde_json::json;
 use std::io::Write;
+use tauri::command;
 
 fn main() {
     // Initialize the logger
@@ -24,8 +24,10 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
-            commands::fetch_and_process_series,
+            commands::filter_series,
             login,
             logout
         ])
@@ -68,14 +70,18 @@ async fn login(username: String, password: String) -> Result<String, String> {
     }
 }
 
-
-
 #[command]
-async fn logout(auth_token: String,refresh_token:String) -> Result<String, String> {
+async fn logout(auth_token: String, refresh_token: String) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
         .post("https://lol.grid.gg/auth/logout")
-        .header("Cookie", format!("Authorization={}; RefreshToken={}", auth_token,refresh_token))
+        .header(
+            "Cookie",
+            format!(
+                "Authorization={}; RefreshToken={}",
+                auth_token, refresh_token
+            ),
+        )
         .send()
         .await
         .map_err(|err| err.to_string())?;

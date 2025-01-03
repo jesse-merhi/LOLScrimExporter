@@ -13,6 +13,11 @@ export const authIsExpired = () => {
 }
 export const getAuthToken = () => localStorage.getItem('authToken') || '';
 export const getRefreshToken = () => localStorage.getItem('refreshToken') || '';
+export const clearTokens = () => {  
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('refreshToken');
+  document.location.reload();
+}
 export const storeAuthToken = (token: string) =>
   localStorage.setItem('authToken', token);
 export const storeRefreshToken = (token: string) =>
