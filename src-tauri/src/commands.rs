@@ -1,10 +1,7 @@
 // src/commands.rs
-use futures::future::join_all;
 use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::HashMap;
 use tauri::command;
 
 // ==============================
@@ -36,20 +33,34 @@ pub struct PlayerFilter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum Modes {
+    Any,
+    Only,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FilterConfig {
-    pub dateRange: DateRange,
+    #[serde(rename = "dateRange")]
+    pub date_range: DateRange,
     pub wins: bool,
     pub losses: bool,
     pub patch: String,
-    pub championsPicked: Vec<ChampionSelection>,
-    pub championsBanned: Vec<ChampionSelection>,
+    #[serde(rename = "championsPicked")]
+    pub champions_picked: Vec<ChampionSelection>,
+    #[serde(rename = "champPickedMode")]
+    pub champ_picked_mode: Modes,
+    #[serde(rename = "championsBanned")]
+    pub champions_banned: Vec<ChampionSelection>,
+    #[serde(rename = "champBannedMode")]
+    pub champ_banned_mode: Modes,
     pub teams: Vec<TeamFilter>,
     pub players: Vec<PlayerFilter>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GameSummary {
-    pub gameVersion: String,
+    #[serde(rename = "gameVersion")]
+    pub game_version: String,
     pub participants: Vec<GameStats>,
 }
 
@@ -72,12 +83,14 @@ pub struct Character {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeamInfo {
-    pub baseInfo: Option<BaseInfo>,
+    #[serde(rename = "baseInfo")]
+    pub base_info: Option<BaseInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BaseInfo {
-    pub logoUrl: String,
+    #[serde(rename = "logoUrl")]
+    pub logo_url: String,
     pub id: String,
     pub name: String,
 }
@@ -85,7 +98,8 @@ pub struct BaseInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SeriesNode {
     pub id: String,
-    pub startTimeScheduled: Option<String>,
+    #[serde(rename = "startTimeScheduled")]
+    pub start_time_scheduled: Option<String>,
     pub teams: Vec<TeamInfo>,
 }
 
@@ -96,19 +110,21 @@ pub struct SeriesEdge {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PageInfo {
-    pub hasNextPage: bool,
-    pub endCursor: Option<String>,
+    #[serde(rename = "hasNextPage")]
+    pub has_next_page: bool,
+    #[serde(rename = "endCursor")]
+    pub end_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AllSeries {
     pub edges: Vec<SeriesEdge>,
-    pub pageInfo: PageInfo,
+    #[serde(rename = "pageInfo")]
+    pub page_info: PageInfo,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesState {
-    pub title: Title,
     pub finished: bool,
     pub teams: Vec<SeriesTeam>,
 }
@@ -116,23 +132,18 @@ pub struct SeriesState {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesStateWithId {
     pub id: String,
-    pub title: Title,
     pub finished: bool,
     pub teams: Vec<SeriesTeam>,
-    pub startTimeScheduled: Option<String>,
+    #[serde(rename = "startTimeScheduled")]
+    pub start_time_scheduled: Option<String>,
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Title {
-    pub nameShortened: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesTeam {
     pub id: String,
     pub score: i64,
     pub players: Vec<Player>,
-    pub baseInfo: Option<BaseInfo>,
+    #[serde(rename = "base_info")]
+    pub base_info: Option<BaseInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -148,52 +159,53 @@ pub struct GameTeam {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameStats {
-    pub damageDealtToObjectives: i64,
-    pub damageDealtToTurrets: i64,
-    pub detectorWardsPlaced: i64,
-    pub largestKillingSpree: i64,
-    pub largestMultiKill: i64,
-    pub magicDamageDealt: i64,
-    pub magicDamageDealtToChampions: i64,
-    pub magicDamageTaken: i64,
-    pub physicalDamageDealt: i64,
-    pub physicalDamageDealtToChampions: i64,
-    pub physicalDamageTaken: i64,
-    pub totalAllyJungleMinionsKilled: i64,
-    pub totalDamageDealt: i64,
-    pub totalDamageDealtToChampions: i64,
-    pub totalDamageShieldedOnTeammates: i64,
-    pub totalDamageTaken: i64,
-    pub totalEnemyJungleMinionsKilled: i64,
-    pub totalHeal: i64,
-    pub turretKills: i64,
-    pub turretTakedowns: i64,
-    pub visionScore: i64,
-    pub visionWardsBoughtInGame: i64,
-    pub wardsKilled: i64,
-    pub wardsPlaced: i64,
-    pub perks: Perks,
-    pub champLevel: i64,
-    pub riotIdGameName: String,
-    pub kills: i64,
-    pub deaths: i64,
-    pub assists: i64,
-    pub championName: String,
-    pub item1: i64,
-    pub item2: i64,
-    pub item3: i64,
-    pub item4: i64,
-    pub item5: i64,
-    pub item6: i64,
-    pub item0: i64,
-    pub totalMinionsKilled: i64,
-    pub goldEarned: i64,
+    // pub damageDealtToObjectives: i64,
+    // pub damageDealtToTurrets: i64,
+    // pub detectorWardsPlaced: i64,
+    // pub largestKillingSpree: i64,
+    // pub largestMultiKill: i64,
+    // pub magicDamageDealt: i64,
+    // pub magicDamageDealtToChampions: i64,
+    // pub magicDamageTaken: i64,
+    // pub physicalDamageDealt: i64,
+    // pub physicalDamageDealtToChampions: i64,
+    // pub physicalDamageTaken: i64,
+    // pub totalAllyJungleMinionsKilled: i64,
+    // pub totalDamageDealt: i64,
+    // pub totalDamageDealtToChampions: i64,
+    // pub totalDamageShieldedOnTeammates: i64,
+    // pub totalDamageTaken: i64,
+    // pub totalEnemyJungleMinionsKilled: i64,
+    // pub totalHeal: i64,
+    // pub turretKills: i64,
+    // pub turretTakedowns: i64,
+    // pub visionScore: i64,
+    // pub visionWardsBoughtInGame: i64,
+    // pub wardsKilled: i64,
+    // pub wardsPlaced: i64,
+    // pub perks: Perks, Removed because unused.
+    // pub champLevel: i64,
+    // pub riotIdGameName: String,
+    // pub kills: i64,
+    // pub deaths: i64,
+    // pub assists: i64,
+    #[serde(rename = "championName")]
+    pub champion_name: String,
+    // pub item1: i64,
+    // pub item2: i64,
+    // pub item3: i64,
+    // pub item4: i64,
+    // pub item5: i64,
+    // pub item6: i64,
+    // pub item0: i64,
+    // pub totalMinionsKilled: i64,
+    // pub goldEarned: i64,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyOrg {
     pub id: String,
     pub name: String,
-    pub userCount: i64,
+    // pub userCount: i64, unused so removing.
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -205,7 +217,8 @@ pub struct TeamNode {
 pub struct TeamInfoShort {
     pub id: String,
     pub name: String,
-    pub logoUrl: String,
+    #[serde(rename = "logoUrl")]
+    pub logo_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -231,7 +244,8 @@ pub struct TeamsFilterTeams {
 pub struct FilteredSeriesResult {
     pub filtered_series: Vec<SeriesStateWithId>,
     pub has_more: bool,
-    pub endCursor: Option<String>,
+    #[serde(rename = "endCursor")]
+    pub end_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -241,30 +255,6 @@ pub struct FilteredSeriesDetail {
     pub series_state: SeriesStateWithId,
     pub participants: Vec<GameStats>,
     pub patch: String,
-}
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PerkSelection {
-    pub perk: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PerkStyle {
-    pub description: String,
-    pub selections: Vec<PerkSelection>,
-    pub style: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StatPerks {
-    pub defense: i64,
-    pub flex: i64,
-    pub offense: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Perks {
-    pub statPerks: StatPerks,
-    pub styles: Vec<PerkStyle>,
 }
 
 pub async fn get_my_team_id(auth_token: String) -> Result<String, String> {
@@ -377,81 +367,93 @@ pub async fn filter_series(
             let patch = &detail.patch;
 
             // ---- Filter by Patch ----
-            if !filters.patch.is_empty() {
-                if !patch.starts_with(&filters.patch) {
-                    if patch < &filters.patch {
-                        is_earlier_patch = true;
-                        info!(
-                            "Series ID {} excluded due to earlier patch: {} < {}",
-                            series_state.id, patch, filters.patch
-                        );
-                    } else {
-                        info!(
-                        "Series ID {} excluded due to patch mismatch: {} does not start with {}",
+            if !filters.patch.is_empty() && !patch.starts_with(&filters.patch) {
+                if patch < &filters.patch {
+                    is_earlier_patch = true;
+                    info!(
+                        "Series ID {} excluded due to earlier patch: {} < {}",
                         series_state.id, patch, filters.patch
                     );
-                    }
-                    return false;
+                } else {
+                    info!(
+                    "Series ID {} excluded due to patch mismatch: {} does not start with {}",
+                    series_state.id, patch, filters.patch
+                );
                 }
+                return false;
             }
 
             // ---- Filter by Wins/Losses ----
-            if filters.wins || filters.losses {
-                if series_state.teams.len() >= 2 && my_team_id.is_some() {
-                    let my_team_id_ref = my_team_id.as_ref().unwrap();
-                    let team1 = &series_state.teams[0];
-                    let team2 = &series_state.teams[1];
+            if (filters.wins || filters.losses) && series_state.teams.len() >= 2 && my_team_id.is_some() {
+                let my_team_id_ref = my_team_id.as_ref().unwrap();
+                let team1 = &series_state.teams[0];
+                let team2 = &series_state.teams[1];
 
-                    let is_team1 = &team1.id == my_team_id_ref;
-                    let is_team2 = &team2.id == my_team_id_ref;
+                let is_team1 = &team1.id == my_team_id_ref;
+                let is_team2 = &team2.id == my_team_id_ref;
 
-                    let my_team_won = (is_team1 && team1.score >= team2.score)
-                        || (is_team2 && team2.score >= team1.score);
-                    let my_team_lost = (is_team1 && team1.score < team2.score)
-                        || (is_team2 && team2.score < team1.score);
+                let my_team_won = (is_team1 && team1.score >= team2.score)
+                    || (is_team2 && team2.score >= team1.score);
+                let my_team_lost = (is_team1 && team1.score < team2.score)
+                    || (is_team2 && team2.score < team1.score);
 
-                    let show_wins = filters.wins && my_team_won;
-                    let show_losses = filters.losses && my_team_lost;
+                let show_wins = filters.wins && my_team_won;
+                let show_losses = filters.losses && my_team_lost;
 
-                    if !(show_wins || show_losses) {
-                        info!(
-                            "Series ID {} excluded based on win/loss filters",
-                            series_state.id
-                        );
-                        return false;
-                    }
-                }
-            }
-
-            // ---- Filter by Champions Picked ----
-            if !filters.championsPicked.is_empty() {
-                let picked_champions: Vec<String> = filters
-                    .championsPicked
-                    .iter()
-                    .map(|c| c.label.clone())
-                    .collect();
-                let picked_in_game = participants
-                    .iter()
-                    .any(|p| picked_champions.contains(&p.championName));
-                if !picked_in_game {
+                if !(show_wins || show_losses) {
                     info!(
-                        "Series ID {} excluded because no picked champions were found in the game",
+                        "Series ID {} excluded based on win/loss filters",
                         series_state.id
                     );
                     return false;
                 }
             }
 
+            // ---- Filter by Champions Picked ----
+            if !filters.champions_picked.is_empty() {
+                let picked_champions: Vec<String> = filters
+                    .champions_picked
+                    .iter()
+                    .map(|c| c.label.clone())
+                    .collect();
+                match filters.champ_picked_mode {
+                    Modes::Any => {
+                        let picked_in_game = picked_champions
+                            .iter()
+                            .any(|champ| participants.iter().any(|p| &p.champion_name == champ));
+                        if !picked_in_game {
+                            info!(
+                                "Series ID {} excluded because no picked champions were found in the game",
+                                series_state.id
+                            );
+                            return false;
+                        }
+                    }
+                    Modes::Only => {
+                        let picked_in_game = picked_champions
+                            .iter()
+                            .all(|champ| participants.iter().any(|p| &p.champion_name == champ));
+                        if !picked_in_game {
+                            info!(
+                                "Series ID {} excluded because not all picked champions were found in the game",
+                                series_state.id
+                            );
+                            return false;
+                        }
+                    }
+                };
+            }
+
             // ---- Filter by Champions Banned ----
-            if !filters.championsBanned.is_empty() {
+            if !filters.champions_banned.is_empty() {
                 let banned_champions: Vec<String> = filters
-                    .championsBanned
+                    .champions_banned
                     .iter()
                     .map(|c| c.label.clone())
                     .collect();
                 let banned_in_game = participants
                     .iter()
-                    .any(|p| banned_champions.contains(&p.championName));
+                    .any(|p| banned_champions.contains(&p.champion_name));
                 info!("Banned in game: {}", banned_in_game);
                 info!("Banned champions: {:?}", banned_champions);
                 if banned_in_game {
