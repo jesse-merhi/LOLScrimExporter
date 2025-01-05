@@ -367,49 +367,45 @@ pub async fn filter_series(
             let patch = &detail.patch;
 
             // ---- Filter by Patch ----
-            if !filters.patch.is_empty() {
-                if !patch.starts_with(&filters.patch) {
-                    if patch < &filters.patch {
-                        is_earlier_patch = true;
-                        info!(
-                            "Series ID {} excluded due to earlier patch: {} < {}",
-                            series_state.id, patch, filters.patch
-                        );
-                    } else {
-                        info!(
-                        "Series ID {} excluded due to patch mismatch: {} does not start with {}",
+            if !filters.patch.is_empty() && !patch.starts_with(&filters.patch) {
+                if patch < &filters.patch {
+                    is_earlier_patch = true;
+                    info!(
+                        "Series ID {} excluded due to earlier patch: {} < {}",
                         series_state.id, patch, filters.patch
                     );
-                    }
-                    return false;
+                } else {
+                    info!(
+                    "Series ID {} excluded due to patch mismatch: {} does not start with {}",
+                    series_state.id, patch, filters.patch
+                );
                 }
+                return false;
             }
 
             // ---- Filter by Wins/Losses ----
-            if filters.wins || filters.losses {
-                if series_state.teams.len() >= 2 && my_team_id.is_some() {
-                    let my_team_id_ref = my_team_id.as_ref().unwrap();
-                    let team1 = &series_state.teams[0];
-                    let team2 = &series_state.teams[1];
+            if (filters.wins || filters.losses) && series_state.teams.len() >= 2 && my_team_id.is_some() {
+                let my_team_id_ref = my_team_id.as_ref().unwrap();
+                let team1 = &series_state.teams[0];
+                let team2 = &series_state.teams[1];
 
-                    let is_team1 = &team1.id == my_team_id_ref;
-                    let is_team2 = &team2.id == my_team_id_ref;
+                let is_team1 = &team1.id == my_team_id_ref;
+                let is_team2 = &team2.id == my_team_id_ref;
 
-                    let my_team_won = (is_team1 && team1.score >= team2.score)
-                        || (is_team2 && team2.score >= team1.score);
-                    let my_team_lost = (is_team1 && team1.score < team2.score)
-                        || (is_team2 && team2.score < team1.score);
+                let my_team_won = (is_team1 && team1.score >= team2.score)
+                    || (is_team2 && team2.score >= team1.score);
+                let my_team_lost = (is_team1 && team1.score < team2.score)
+                    || (is_team2 && team2.score < team1.score);
 
-                    let show_wins = filters.wins && my_team_won;
-                    let show_losses = filters.losses && my_team_lost;
+                let show_wins = filters.wins && my_team_won;
+                let show_losses = filters.losses && my_team_lost;
 
-                    if !(show_wins || show_losses) {
-                        info!(
-                            "Series ID {} excluded based on win/loss filters",
-                            series_state.id
-                        );
-                        return false;
-                    }
+                if !(show_wins || show_losses) {
+                    info!(
+                        "Series ID {} excluded based on win/loss filters",
+                        series_state.id
+                    );
+                    return false;
                 }
             }
 
