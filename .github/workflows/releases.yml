@@ -70,6 +70,4 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
           bundleIdentifier: "com.example.lolscrimexporter"
-          bundleVersion: "__VERSION__"
-          binaryName: ${{ matrix.binaryName }}
           includeUpdaterJson: true
