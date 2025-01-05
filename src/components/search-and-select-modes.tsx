@@ -1,34 +1,40 @@
-import React, { useEffect } from "react";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandGroup,
-  CommandEmpty,
-} from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckIcon, XCircle } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { CheckIcon, XCircle } from "lucide-react";
+import React, { useEffect } from "react";
 
 export type resultsType = { label: string; value: string; logoUrl?: string };
-export interface SearchSelectCommandProps {
+export interface SearchSelectCommandModesProps {
   fetchFn: (searchTerm: string) => Promise<resultsType[]>;
   selected: resultsType[];
+  selectMode: "Any" | "Only";
+  setSelectMode: React.Dispatch<React.SetStateAction<"Any" | "Only">>;
   setSelected: React.Dispatch<React.SetStateAction<resultsType[]>>;
   placeholder?: string;
   label?: string;
 }
 
-export const SearchSelectCommand: React.FC<SearchSelectCommandProps> = ({
+export const SearchSelectCommandModes: React.FC<
+  SearchSelectCommandModesProps
+> = ({
   fetchFn,
   placeholder = "Type and press Enter...",
+  selectMode,
+  setSelectMode,
   setSelected,
   selected,
   label,
@@ -68,31 +74,73 @@ export const SearchSelectCommand: React.FC<SearchSelectCommandProps> = ({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            className="relative w-full h-full text-left !items-start !justify-start flex flex-wrap gap-2"
+            className="relative w-full h-full text-left !items-start !justify-start flex flex-col gap-0 p-0 rounded-md overflow-hidden"
             onClick={() => setOpen(true)}
           >
             {selected.length > 0 ? (
-              <div className="flex flex-wrap gap-2 justify-start items-start">
-                {selected.map((item) => (
-                  <Badge
-                    key={item.value}
-                    className="flex items-center h-6"
+              <>
+                <div className="flex w-full border-b border-slate">
+                  <div
+                    className={cn(
+                      "flex-1 text-center py-2 text-sm font-medium cursor-pointer rounded-tl-md",
+                      selectMode === "Any"
+                        ? "bg-primary text-white"
+                        : "hover:bg-gray-100"
+                    )}
                     onClick={(e) => {
-                      e.stopPropagation(); // Prevent click from bubbling to Button
-                      toggleItem(item);
+                      e.stopPropagation();
+                      setSelectMode("Any");
                     }}
                   >
-                    {item.logoUrl && (
-                      <img className="h-full mr-2" src={item.logoUrl} />
+                    Any
+                  </div>
+                  <div
+                    className={cn(
+                      "flex-1 text-center py-2 text-sm font-medium cursor-pointer rounded-tr-md ",
+                      selectMode === "Only"
+                        ? "bg-primary text-white"
+                        : "hover:bg-gray-100"
                     )}
-                    {item.label}
-                    <XCircle className="ml-1 h-4 w-4 cursor-pointer" />
-                  </Badge>
-                ))}
-              </div>
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectMode("Only");
+                    }}
+                  >
+                    Only
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="flex flex-wrap gap-2 justify-start items-center">
+                    {selected.map((item, index) => (
+                      <React.Fragment key={item.value}>
+                        <Badge
+                          className="flex items-center h-6"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent click from bubbling to Button
+                            toggleItem(item);
+                          }}
+                        >
+                          {item.logoUrl && (
+                            <img className="h-full mr-2" src={item.logoUrl} />
+                          )}
+                          {item.label}
+                          <XCircle className="ml-1 h-4 w-4 cursor-pointer" />
+                        </Badge>
+                        {index < selected.length - 1 && (
+                          <span className="text-xs font-medium px-2 self-center">
+                            {selectMode === "Any" ? "or" : "and"}
+                          </span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : (
-              placeholder
+              <div className="px-4 py-2">{placeholder}</div>
             )}
+
+            {/* Badges Section */}
           </Button>
         </PopoverTrigger>
         {open && (

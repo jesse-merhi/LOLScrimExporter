@@ -33,6 +33,12 @@ pub struct PlayerFilter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum Modes {
+    Any,
+    Only,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FilterConfig {
     #[serde(rename = "dateRange")]
     pub date_range: DateRange,
@@ -41,8 +47,12 @@ pub struct FilterConfig {
     pub patch: String,
     #[serde(rename = "championsPicked")]
     pub champions_picked: Vec<ChampionSelection>,
+    #[serde(rename = "champPickedMode")]
+    pub champ_picked_mode: Modes,
     #[serde(rename = "championsBanned")]
     pub champions_banned: Vec<ChampionSelection>,
+    #[serde(rename = "champBannedMode")]
+    pub champ_banned_mode: Modes,
     pub teams: Vec<TeamFilter>,
     pub players: Vec<PlayerFilter>,
 }
@@ -115,7 +125,6 @@ pub struct AllSeries {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesState {
-    pub title: Title,
     pub finished: bool,
     pub teams: Vec<SeriesTeam>,
 }
@@ -123,19 +132,11 @@ pub struct SeriesState {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesStateWithId {
     pub id: String,
-    pub title: Title,
     pub finished: bool,
     pub teams: Vec<SeriesTeam>,
     #[serde(rename = "startTimeScheduled")]
     pub start_time_scheduled: Option<String>,
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Title {
-    #[serde(rename = "nameShortended")]
-    pub name_shortened: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SeriesTeam {
     pub id: String,
@@ -419,16 +420,32 @@ pub async fn filter_series(
                     .iter()
                     .map(|c| c.label.clone())
                     .collect();
-                let picked_in_game = participants
-                    .iter()
-                    .any(|p| picked_champions.contains(&p.champion_name));
-                if !picked_in_game {
-                    info!(
-                        "Series ID {} excluded because no picked champions were found in the game",
-                        series_state.id
-                    );
-                    return false;
-                }
+                match filters.champ_picked_mode {
+                    Modes::Any => {
+                        let picked_in_game = picked_champions
+                            .iter()
+                            .any(|champ| participants.iter().any(|p| &p.champion_name == champ));
+                        if !picked_in_game {
+                            info!(
+                                "Series ID {} excluded because no picked champions were found in the game",
+                                series_state.id
+                            );
+                            return false;
+                        }
+                    }
+                    Modes::Only => {
+                        let picked_in_game = picked_champions
+                            .iter()
+                            .all(|champ| participants.iter().any(|p| &p.champion_name == champ));
+                        if !picked_in_game {
+                            info!(
+                                "Series ID {} excluded because not all picked champions were found in the game",
+                                series_state.id
+                            );
+                            return false;
+                        }
+                    }
+                };
             }
 
             // ---- Filter by Champions Banned ----

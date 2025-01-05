@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { Label } from "./ui/label";
+import { SearchSelectCommandModes } from "./search-and-select-modes";
 
 interface FilterConfig {
   dateRange: DateRange;
@@ -23,7 +24,9 @@ interface FilterConfig {
   losses: boolean;
   patch: string;
   championsPicked: resultsType[]; // store champion IDs
+  champPickedMode: "Any" | "Only";
   championsBanned: resultsType[];
+  champBannedMode: "Any" | "Only";
   teams: resultsType[];
   players: resultsType[];
 }
@@ -52,6 +55,8 @@ function Filter() {
   const [patches, setPatches] = useState<string[]>([]);
   const [championsPicked, setChampionsPicked] = useState<resultsType[]>([]);
   const [championsBanned, setChampionsBanned] = useState<resultsType[]>([]);
+  const [champPickedMode, setChampPickedMode] = useState<"Any" | "Only">("Any");
+  const [champBannedMode, setChampBannedMode] = useState<"Any" | "Only">("Any");
   // Fetch game versions from Data Dragon
   const [isLoadingPatches, setIsLoadingPatches] = useState(true);
 
@@ -247,7 +252,9 @@ function Filter() {
         losses: true,
         patch: "",
         championsPicked: [],
+        champPickedMode: "Any",
         championsBanned: [],
+        champBannedMode: "Any",
         teams: [],
         players: [],
       };
@@ -288,7 +295,9 @@ function Filter() {
       losses,
       patch,
       championsPicked,
+      champPickedMode,
       championsBanned,
+      champBannedMode,
       teams,
       players,
     };
@@ -405,9 +414,11 @@ function Filter() {
           {/* Search & Select for Champs Picked */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">Champs Picked</Label>
-            <SearchSelectCommand
+            <SearchSelectCommandModes
               setSelected={setChampionsPicked}
+              setSelectMode={setChampPickedMode}
               selected={championsPicked}
+              selectMode={champPickedMode}
               fetchFn={fetchChampsByName}
               placeholder="Select Champions Picked"
             />
@@ -416,9 +427,11 @@ function Filter() {
           {/* Search & Select for Champs Banned */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">Champs Banned</Label>
-            <SearchSelectCommand
+            <SearchSelectCommandModes
               setSelected={setChampionsBanned}
+              setSelectMode={setChampBannedMode}
               selected={championsBanned}
+              selectMode={champBannedMode}
               fetchFn={fetchChampsByName}
               placeholder="Select Champions Banned"
             />

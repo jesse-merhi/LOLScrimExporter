@@ -236,6 +236,7 @@ function SidebarLoader(props: {
         isValidSeriesDetail(detail)
       );
       setFetchStage("Applying filters...");
+      console.log(validSeriesDetails);
       let filteredSeriesDetails: {
         seriesState: SeriesStateWithId;
         participants: GameStats[];
@@ -273,6 +274,7 @@ function SidebarLoader(props: {
   const fetchSeriesDetails = async (allGameIds: number[]) => {
     return await Promise.all(createSeriesDetailsPromises(allGameIds));
   };
+
   const updateSeriesData = (
     seriesEdges: SeriesEdge[],
     filteredSeriesDetails: any[],
