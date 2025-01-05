@@ -1,12 +1,12 @@
-import { getAuthToken } from '@/lib/utils';
-import { useEffect, useState } from 'react';
-import { DateRange } from 'react-day-picker';
-import { resultsType, SearchSelectCommand } from './search-and-select';
-import { Button } from './ui/button';
-import { Checkbox } from './ui/checkbox';
-import { DatePickerWithRange } from './ui/daterange';
+import { getAuthToken } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { DateRange } from "react-day-picker";
+import { resultsType, SearchSelectCommand } from "./search-and-select";
+import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
+import { DatePickerWithRange } from "./ui/daterange";
 
-import { Combobox } from './ui/combobox';
+import { Combobox } from "./ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from './ui/dialog';
-import { Label } from './ui/label';
+} from "./ui/dialog";
+import { Label } from "./ui/label";
 
 interface FilterConfig {
   dateRange: DateRange;
@@ -46,7 +46,7 @@ function Filter() {
   });
   const [wins, setWins] = useState(true);
   const [losses, setLosses] = useState(true);
-  const [patch, setPatch] = useState<string>('');
+  const [patch, setPatch] = useState<string>("");
   const [players, setPlayers] = useState<resultsType[]>([]);
   const [teams, setTeams] = useState<resultsType[]>([]);
   const [patches, setPatches] = useState<string[]>([]);
@@ -59,17 +59,17 @@ function Filter() {
     async function fetchPatches() {
       try {
         const response = await fetch(
-          'https://ddragon.leagueoflegends.com/api/versions.json'
+          "https://ddragon.leagueoflegends.com/api/versions.json"
         );
         const versions: string[] = await response.json();
 
         const formattedVersions = versions.map((version: string) =>
-          version.split('.').slice(0, 2).join('.')
+          version.split(".").slice(0, 2).join(".")
         );
 
         setPatches([...new Set(formattedVersions)]);
       } catch (error) {
-        console.error('Error fetching patches:', error);
+        console.error("Error fetching patches:", error);
       } finally {
         setIsLoadingPatches(false);
       }
@@ -78,9 +78,9 @@ function Filter() {
   }, []);
 
   async function fetchPlayersByNickname(nickname: string) {
-    const url = 'https://api.grid.gg/central-data/graphql';
+    const url = "https://api.grid.gg/central-data/graphql";
     const requestBody = {
-      operationName: 'GetPlayersFilter',
+      operationName: "GetPlayersFilter",
       variables: {
         first: 50,
         nickname: { contains: nickname },
@@ -102,14 +102,14 @@ function Filter() {
     try {
       const authToken = getAuthToken();
       if (!authToken) {
-        console.error('No auth token, please log in first.');
+        console.error("No auth token, please log in first.");
         return [];
       }
 
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(requestBody),
@@ -123,16 +123,16 @@ function Filter() {
         // no logoUrl here, but you can add something if needed
       }));
     } catch (error) {
-      console.error('Error fetching Players:', error);
+      console.error("Error fetching Players:", error);
       return [];
     }
   }
 
   // 2) SINGLE-FETCH for TEAMS by Name
   async function fetchTeamsByName(name: string) {
-    const url = 'https://api.grid.gg/central-data/graphql';
+    const url = "https://api.grid.gg/central-data/graphql";
     const requestBody = {
-      operationName: 'GetTeamsFilter',
+      operationName: "GetTeamsFilter",
       variables: {
         first: 50,
         name: { contains: name },
@@ -155,14 +155,14 @@ function Filter() {
     try {
       const authToken = getAuthToken();
       if (!authToken) {
-        console.error('No auth token, please log in first.');
+        console.error("No auth token, please log in first.");
         return [];
       }
 
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(requestBody),
@@ -176,7 +176,7 @@ function Filter() {
         logoUrl: edge.node.logoUrl,
       }));
     } catch (error) {
-      console.error('Error fetching Teams:', error);
+      console.error("Error fetching Teams:", error);
       return [];
     }
   }
@@ -190,7 +190,7 @@ function Filter() {
       try {
         // 1) Get the array of versions, newest is first
         const versionsRes = await fetch(
-          'https://ddragon.leagueoflegends.com/api/versions.json'
+          "https://ddragon.leagueoflegends.com/api/versions.json"
         );
         const versionsData: string[] = await versionsRes.json();
         const latestVersion = versionsData[0]; // e.g., "14.24.1"
@@ -215,7 +215,7 @@ function Filter() {
 
         setChampions(mapped);
       } catch (err) {
-        console.error('Error loading champion data:', err);
+        console.error("Error loading champion data:", err);
       }
     }
 
@@ -234,7 +234,7 @@ function Filter() {
   // ----------------------------------------------------------------
   // 4) On mount, load from localStorage
   useEffect(() => {
-    let filterConfigStr = localStorage.getItem('filterConfig');
+    let filterConfigStr = localStorage.getItem("filterConfig");
     if (!filterConfigStr) {
       let d = new Date();
       d.setFullYear(d.getFullYear() - 1);
@@ -245,13 +245,13 @@ function Filter() {
         },
         wins: true,
         losses: true,
-        patch: '',
+        patch: "",
         championsPicked: [],
         championsBanned: [],
         teams: [],
         players: [],
       };
-      localStorage.setItem('filterConfig', JSON.stringify(defaultConfig));
+      localStorage.setItem("filterConfig", JSON.stringify(defaultConfig));
       filterConfigStr = JSON.stringify(defaultConfig);
     }
 
@@ -293,12 +293,12 @@ function Filter() {
       players,
     };
     console.log(
-      'UPDATE?',
-      JSON.stringify(filterConfig) !== localStorage.getItem('filterConfig')
+      "UPDATE?",
+      JSON.stringify(filterConfig) !== localStorage.getItem("filterConfig")
     );
-    if (JSON.stringify(filterConfig) !== localStorage.getItem('filterConfig')) {
-      localStorage.setItem('filterConfig', JSON.stringify(filterConfig));
-      window.dispatchEvent(new Event('filtersUpdated'));
+    if (JSON.stringify(filterConfig) !== localStorage.getItem("filterConfig")) {
+      localStorage.setItem("filterConfig", JSON.stringify(filterConfig));
+      window.dispatchEvent(new Event("filtersUpdated"));
     }
   };
   return (
@@ -310,7 +310,7 @@ function Filter() {
       }}
     >
       <DialogTrigger asChild>
-        <Button className='h-[10%] w-full text-xl flex items-center justify-center border-t-2 border-foreground bg-foreground hover:bg-gray-900'>
+        <Button className="h-[10%] w-full text-xl flex items-center justify-center border-t-2 border-foreground bg-foreground hover:bg-gray-900">
           Filters
         </Button>
       </DialogTrigger>
@@ -318,19 +318,19 @@ function Filter() {
         <DialogHeader>
           <DialogTitle>Set Filters</DialogTitle>
           <DialogDescription>
-            Filter out games based on different criteria. Make sure to save them
-            when you are done.
+            Filter out games based on different criteria. Filters will update
+            when this window closes.
           </DialogDescription>
         </DialogHeader>
 
-        <div className='grid gap-4 py-4'>
+        <div className="grid gap-4 py-4">
           {/* Date Range */}
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label htmlFor='datepicker' className='text-right'>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="datepicker" className="text-right">
               Date Range
             </Label>
             <DatePickerWithRange
-              id='datepicker'
+              id="datepicker"
               initialDateRange={dateRange}
               onChange={(newVal) => {
                 newVal && setDateRange(newVal);
@@ -339,88 +339,88 @@ function Filter() {
           </div>
 
           {/* Wins / Losses */}
-          <div className='grid grid-cols-4 gap-4 items-center'>
-            <Label htmlFor='wins' className='text-right'>
+          <div className="grid grid-cols-4 gap-4 items-center">
+            <Label htmlFor="wins" className="text-right">
               Wins
             </Label>
             <Checkbox
-              id='wins'
+              id="wins"
               checked={wins}
-              className='col-span-3'
+              className="col-span-3"
               onCheckedChange={handleToggleWins}
             />
-            <Label htmlFor='losses' className='text-right'>
+            <Label htmlFor="losses" className="text-right">
               Losses
             </Label>
             <Checkbox
-              id='losses'
+              id="losses"
               checked={losses}
-              className='col-span-3'
+              className="col-span-3"
               onCheckedChange={handleToggleLosses}
             />
           </div>
 
           {/* Patch Input */}
-          <div className='grid grid-cols-4 gap-4 items-center'>
-            <Label htmlFor='patch' className='text-right'>
+          <div className="grid grid-cols-4 gap-4 items-center">
+            <Label htmlFor="patch" className="text-right">
               Patch
             </Label>
             <Combobox
-              id='patch'
+              id="patch"
               options={
                 isLoadingPatches
-                  ? [{ label: 'Loading...', value: '' }]
+                  ? [{ label: "Loading...", value: "" }]
                   : patches.map((p) => ({ label: p, value: p }))
               }
               value={patch}
               onChange={handlePatchChange}
               placeholder={
-                isLoadingPatches ? 'Loading patches...' : 'Select a patch'
+                isLoadingPatches ? "Loading patches..." : "Select a patch"
               }
             />
           </div>
 
           {/* Search & Select for Players */}
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label className='text-right'>Players</Label>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right">Players</Label>
             <SearchSelectCommand
               setSelected={setPlayers}
               selected={players}
               fetchFn={fetchPlayersByNickname}
-              placeholder='Filter Players'
+              placeholder="Filter Players"
             />
           </div>
 
           {/* Search & Select for Teams */}
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label className='text-right'>Teams</Label>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right">Teams</Label>
             <SearchSelectCommand
               setSelected={setTeams}
               selected={teams}
               fetchFn={fetchTeamsByName}
-              placeholder='Filter Teams'
+              placeholder="Filter Teams"
             />
           </div>
 
           {/* Search & Select for Champs Picked */}
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label className='text-right'>Champs Picked</Label>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right">Champs Picked</Label>
             <SearchSelectCommand
               setSelected={setChampionsPicked}
               selected={championsPicked}
               fetchFn={fetchChampsByName}
-              placeholder='Select Champions Picked'
+              placeholder="Select Champions Picked"
             />
           </div>
 
           {/* Search & Select for Champs Banned */}
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label className='text-right'>Champs Banned</Label>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right">Champs Banned</Label>
             <SearchSelectCommand
               setSelected={setChampionsBanned}
               selected={championsBanned}
               fetchFn={fetchChampsByName}
-              placeholder='Select Champions Banned'
+              placeholder="Select Champions Banned"
             />
           </div>
         </div>
