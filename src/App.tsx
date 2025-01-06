@@ -11,6 +11,9 @@ import Stats from "./components/stats";
 import Summary from "./components/summary";
 import { Button } from "./components/ui/button";
 import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { set } from "date-fns";
 // Filter
 // - Per TEAM
 // - Losses? Wins?
@@ -34,6 +37,7 @@ function App() {
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState<number[]>([0, 0]);
+  const [update, setUpdate] = useState<any>(null);
 
   // Helper functions to manage localStorage
   const clearTokens = () => {
@@ -87,6 +91,62 @@ function App() {
     }
   }, [selectedGame]);
   console.log(authIsExpired());
+
+  const checkForUpdates = async () => {
+    const update = await check();
+    if (update) {
+      console.log(
+        `found update ${update.version} from ${update.date} with notes ${update.body}`
+      );
+      let downloaded = 0;
+      let contentLength = 0;
+      // alternatively we could also call update.download() and update.install() separately
+      update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            contentLength = event.data.contentLength ?? 0;
+            console.log(
+              `started downloading ${event.data.contentLength} bytes`
+            );
+            break;
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            console.log(`downloaded ${downloaded} from ${contentLength}`);
+            setUpdate({
+              downloaded,
+              contentLength,
+            });
+            break;
+          case "Finished":
+            console.log("download finished");
+            setUpdate(null);
+            break;
+        }
+      });
+
+      console.log("update installed");
+      await relaunch();
+    }
+  };
+
+  useEffect(() => {
+    checkForUpdates();
+  }, []);
+
+  if (update) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center flex-col">
+        <div className="flex flex-col items-center">
+          <div className="text-2xl mb-4">Updating</div>
+          <MoonLoader />
+
+          <div className="text-lg mt-4">
+            Downloaded {update.downloaded} of {update.contentLength} bytes
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!reloadKey && (!getAuthToken() || authIsExpired())) {
     return <Login setReloadKey={setReloadKey} />;
   }
