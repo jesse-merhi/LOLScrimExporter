@@ -13,7 +13,6 @@ import { Button } from "./components/ui/button";
 import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { set } from "date-fns";
 // Filter
 // - Per TEAM
 // - Losses? Wins?
