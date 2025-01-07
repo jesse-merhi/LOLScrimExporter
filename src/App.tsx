@@ -86,7 +86,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (selectedGame) {
+    if (selectedGame !== null) {
       fetchGameSummary();
     }
   }, [selectedGame]);

@@ -412,19 +412,24 @@ function SidebarLoader(props: {
               <div
                 className=" w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer hover:bg-slate-800"
                 key={node.id}
-                onClick={async () => {
+                onClick={() => {
+                  console.log("Selected game:", node.id);
                   props.setSelectedGame(node.id);
                   props.setGameLoading(true);
                   props.setScores([team1Score, team2Score]);
                   if (seriesDetails[node.id].patch) {
                     props.setSelectedPatch(seriesDetails[node.id].patch);
                   } else {
-                    // Get most recent patch using ddragon
-                    const patch = await fetch(
+                    fetch(
                       "https://ddragon.leagueoflegends.com/api/versions.json"
-                    );
-                    const patchData = await patch.json();
-                    props.setSelectedPatch(patchData[0]);
+                    )
+                      .then((response) => response.json())
+                      .then((patchData) => {
+                        props.setSelectedPatch(patchData[0]);
+                      })
+                      .catch((error) => {
+                        console.error("Failed to fetch patch data:", error);
+                      });
                   }
                 }}
               >
