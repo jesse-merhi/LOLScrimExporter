@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { DatePickerWithRange } from "./ui/daterange";
 
+import { SearchSelectCommandModes } from "./search-and-select-modes";
 import { Combobox } from "./ui/combobox";
 import {
   Dialog,
@@ -16,7 +17,6 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { Label } from "./ui/label";
-import { SearchSelectCommandModes } from "./search-and-select-modes";
 
 interface FilterConfig {
   dateRange: DateRange;
@@ -212,6 +212,7 @@ function Filter() {
         const mapped = Object.keys(data).map((champKey) => {
           const champ: ChampionRaw = data[champKey];
           return {
+            champ: champKey,
             label: champ.name,
             value: champ.key, // the numeric ID as a string
             logoUrl: `https://ddragon.leagueoflegends.com/cdn/${latestVersion}/img/champion/${champ.image.full}`,
@@ -301,10 +302,6 @@ function Filter() {
       teams,
       players,
     };
-    console.log(
-      "UPDATE?",
-      JSON.stringify(filterConfig) !== localStorage.getItem("filterConfig")
-    );
     if (JSON.stringify(filterConfig) !== localStorage.getItem("filterConfig")) {
       localStorage.setItem("filterConfig", JSON.stringify(filterConfig));
       window.dispatchEvent(new Event("filtersUpdated"));

@@ -11,3 +11,17 @@ bun i
 ```
 bun run tauri dev
 ```
+
+# Weird errors?
+
+```
+rustup update
+cargo update
+```
+
+# Clean and rebuild
+
+```
+cargo clean
+cargo build
+```

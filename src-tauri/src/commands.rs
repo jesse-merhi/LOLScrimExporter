@@ -18,6 +18,7 @@ pub struct DateRange {
 pub struct ChampionSelection {
     pub value: String,
     pub label: String,
+    pub champ: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -289,12 +290,11 @@ pub async fn get_my_team_id(auth_token: String) -> Result<String, String> {
         .json(&serde_json::json!({
             "operationName": "GetTeamsFilter",
             "variables": {
-                "first": 1,
                 "name": { "contains": my_team_name }
             },
             "query": r#"
-            query GetTeamsFilter($name: StringFilter, $first: Int) {
-                teams(filter: { name: $name }, first: $first) {
+            query GetTeamsFilter($name: StringFilter) {
+                teams(filter: { name: $name }) {
                     edges {
                         node {
                             id
@@ -356,7 +356,17 @@ pub async fn filter_series(
     // Get user's team ID if wins/losses filter is enabled
     let mut my_team_id: Option<String> = None;
     if filters.wins || filters.losses {
-        my_team_id = Some(get_my_team_id(auth_token.clone()).await?);
+        match get_my_team_id(auth_token.clone()).await {
+            Ok(team_id) => {
+                my_team_id = Some(team_id);
+            }
+            Err(err) => {
+                warn!(
+                    "Could not determine my_team_id: {}. Wins/Losses filter will be ignored.",
+                    err
+                );
+            }
+        }
     }
     let mut is_earlier_patch = false;
     let filtered_series_details = series_details
@@ -414,7 +424,7 @@ pub async fn filter_series(
                 let picked_champions: Vec<String> = filters
                     .champions_picked
                     .iter()
-                    .map(|c| c.label.clone())
+                    .map(|c| c.champ.clone())
                     .collect();
                 match filters.champ_picked_mode {
                     Modes::Any => {
@@ -449,7 +459,7 @@ pub async fn filter_series(
                 let banned_champions: Vec<String> = filters
                     .champions_banned
                     .iter()
-                    .map(|c| c.label.clone())
+                    .map(|c| c.champ.clone())
                     .collect();
                 let banned_in_game = participants
                     .iter()
