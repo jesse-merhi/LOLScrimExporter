@@ -1,42 +1,30 @@
-import { useEffect, useState } from "react";
+import { Champion } from "@/lib/types/champions";
+import { GameStats } from "@/lib/types/gameStats";
+import { getAuthToken } from "@/lib/utils";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { GameStats } from "@/lib/types/gameStats";
-import { Separator } from "./ui/separator";
-import { ScrollArea } from "./ui/scroll-area";
-import MoonLoader from "react-spinners/MoonLoader";
-import { Champion } from "@/lib/types/champions";
-import { getAuthToken } from "@/lib/utils";
 import { Download } from "lucide-react";
+import { useState } from "react";
+import MoonLoader from "react-spinners/MoonLoader";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { ScrollArea } from "./ui/scroll-area";
+import { Separator } from "./ui/separator";
 
 function Summary({
   gameSummary,
   scores,
+  champions,
   patch,
   gameId,
 }: {
   gameSummary: GameStats[];
   scores: number[];
   patch: string;
+  champions: Record<string, Champion>;
   gameId: string;
 }) {
-  const [champions, setChampions] = useState<Record<string, Champion> | null>(
-    null
-  );
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const fetchChamps = async () => {
-      const response = await fetch(
-        `https://ddragon.leagueoflegends.com/cdn/${patch}/data/en_US/champion.json`
-      );
-      const champs = await response.json();
-      setChampions(champs.data);
-    };
-    fetchChamps();
-  }, [patch]);
 
   const downloadFile = async () => {
     const authToken = getAuthToken();
@@ -99,14 +87,11 @@ function Summary({
     }
   };
 
-  if (!champions) {
-    return <MoonLoader size={25} color="white" />;
-  }
-
   return (
-    <div className="w-full">
+    <div className="w-full h-full pb-4">
       <ToastContainer />
       <ScrollArea className="overflow y-auto px-4 w-full h-full">
+        <div className="font-semibold w-full text-center">Patch {patch}</div>
         {gameSummary ? (
           gameSummary.map((player, index) => (
             <div className="w-full " key={index}>

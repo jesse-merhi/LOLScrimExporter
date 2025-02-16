@@ -1,44 +1,31 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
 import MoonLoader from "react-spinners/MoonLoader";
 import "./App.css";
-import Draft from "./components/draft";
+import Draft, { DraftLog } from "./components/draft";
 import Filter from "./components/filter";
 import Login from "./components/login";
 import SidebarLoader from "./components/sidebar-loader";
 import Stats from "./components/stats";
 import Summary from "./components/summary";
 import { Button } from "./components/ui/button";
+import { getBackoffDelay } from "./lib/api";
+import { fetchChampionData } from "./lib/ddragon";
 import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-// Filter
-// - Per TEAM
-// - Losses? Wins?
-// - Champions
-// - Filter based on bans?
-// - Start Date, end date
-// - ASC DESC
 
-// Other Things to do
-// - Draft Order + Bans
-// UI/UX
-// Downloadable Files
-// Date
-/// https://developer.riotgames.com/docs/lol#data-dragon
-// https://ddragon.leagueoflegends.com/cdn/14.24.1/data/en_US/champion.json
+const MAX_RETRIES = 10;
 
 function App() {
-  const [gameSummary, setGameSummary] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedPatch, setSelectedPatch] = useState<string>("");
-  const [gameLoading, setGameLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<null | string>(null);
   const [scores, setScores] = useState<number[]>([0, 0]);
   const [update, setUpdate] = useState<any>(null);
 
-  // Helper functions to manage localStorage
   const clearTokens = () => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("refreshToken");
@@ -51,79 +38,127 @@ function App() {
       const refreshToken = getRefreshToken();
       await invoke("logout", { authToken, refreshToken });
       clearTokens();
-      console.log("Logout successful");
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
 
-  const fetchGameSummary = async () => {
-    const authToken = getAuthToken();
-    if (!authToken) {
-      console.error("No auth token, please log in first.");
-      return;
-    }
-
-    const response = await fetch(
-      `https://api.grid.gg/file-download/end-state/riot/series/${selectedGame}/games/1/summary`,
-      {
+  // --- Game Summary Query ---
+  const {
+    data: gameSummary,
+    isLoading: gameLoading,
+    failureCount,
+  } = useQuery({
+    queryKey: ["gameSummary", selectedGame],
+    queryFn: async () => {
+      if (!selectedGame) return [];
+      const authToken = getAuthToken();
+      if (!authToken) throw new Error("No auth token, please log in first.");
+      const url = `https://api.grid.gg/file-download/end-state/riot/series/${selectedGame}/games/1/summary`;
+      const options: RequestInit = {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
+      };
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error("Failed to fetch game summary");
+      const data = await response.json();
+      return data.participants;
+    },
+    retry: MAX_RETRIES,
+    enabled: !!selectedGame,
+  });
+
+  // --- Champion Data Query ---
+  const {
+    data: championJson,
+    isLoading: isLoadingChampions,
+    isError: isChampionError,
+    error: championError,
+  } = useQuery({
+    queryKey: ["championsSummary", selectedPatch],
+    queryFn: () => fetchChampionData(selectedPatch),
+    enabled: !!selectedPatch,
+    retry: true,
+  });
+
+  // --- Event Log Query ---
+  const {
+    data: eventLog,
+    isLoading: isEventLogLoading,
+    error: eventLogError,
+    failureCount: eventLogFailureCount,
+  } = useQuery({
+    queryKey: ["eventLog", selectedGame],
+    queryFn: async () => {
+      const authToken = getAuthToken();
+      if (!authToken) {
+        throw new Error("No auth token, please log in first.");
       }
-    );
-
-    if (!response.ok) {
-      setGameSummary([]);
-      setGameLoading(false);
-      return;
-    }
-
-    const data = await response.json();
-    setGameSummary(data.participants);
-    setGameLoading(false);
-  };
-
-  useEffect(() => {
-    if (selectedGame !== null) {
-      fetchGameSummary();
-    }
-  }, [selectedGame]);
-  console.log(authIsExpired());
+      const url = "https://lol.grid.gg/api/event-explorer-api/events/graphql";
+      const options: RequestInit = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          operationName: "getSeriesEvents",
+          variables: {
+            id: selectedGame,
+            filter: {
+              event: [
+                { type: { eq: "team-banned-character" } },
+                { type: { eq: "team-picked-character" } },
+                { type: { eq: "grid-validated-series" } },
+              ],
+            },
+          },
+          query: `query getSeriesEvents($id: String!, $filter: EventsFilter, $after: Cursor) {
+            events(seriesId: $id, filter: $filter, after: $after) {
+              edges {
+                node {
+                  type
+                  sentenceChunks {
+                    text
+                    strikethrough
+                  }
+                }
+              }
+            }
+          }`,
+        }),
+      };
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        throw new Error("Request failed: " + response.statusText);
+      }
+      const data = await response.json();
+      return data.data.events.edges as DraftLog[];
+    },
+    enabled: !!selectedGame,
+    retry: 3,
+  });
 
   const checkForUpdates = async () => {
     const update = await check();
     if (update) {
-      console.log(
-        `found update ${update.version} from ${update.date} with notes ${update.body}`
-      );
       let downloaded = 0;
       let contentLength = 0;
-      // alternatively we could also call update.download() and update.install() separately
       update.downloadAndInstall((event) => {
         switch (event.event) {
           case "Started":
             contentLength = event.data.contentLength ?? 0;
-            console.log(
-              `started downloading ${event.data.contentLength} bytes`
-            );
             break;
           case "Progress":
             downloaded += event.data.chunkLength;
-            console.log(`downloaded ${downloaded} from ${contentLength}`);
-            setUpdate({
-              downloaded,
-              contentLength,
-            });
+            setUpdate({ downloaded, contentLength });
             break;
           case "Finished":
-            console.log("download finished");
             setUpdate(null);
             break;
         }
       });
-
-      console.log("update installed");
       await relaunch();
     }
   };
@@ -132,13 +167,39 @@ function App() {
     checkForUpdates();
   }, []);
 
+  // --- Combined Error Handling ---
+  const combinedError = eventLogError || championError;
+  if (combinedError) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center">
+        <p className="text-lg text-red-500">
+          Error loading data: {(combinedError as Error).message}
+        </p>
+      </div>
+    );
+  }
+
+  if (!reloadKey && (!getAuthToken() || authIsExpired())) {
+    return <Login setReloadKey={setReloadKey} />;
+  }
+
+  // --- Champion Loading Spinner ---
+  if (isLoadingChampions) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center">
+        <MoonLoader size={40} color="#fff" />
+        <div className="mt-4 text-lg text-gray-800">Loading champions...</div>
+      </div>
+    );
+  }
+
+  const champions = championJson?.data;
   if (update) {
     return (
       <div className="h-screen w-screen flex items-center justify-center flex-col">
         <div className="flex flex-col items-center">
           <div className="text-2xl mb-4">Updating</div>
           <MoonLoader />
-
           <div className="text-lg mt-4">
             Downloaded {update.downloaded} of {update.contentLength} bytes
           </div>
@@ -146,21 +207,15 @@ function App() {
       </div>
     );
   }
-  if (!reloadKey && (!getAuthToken() || authIsExpired())) {
-    return <Login setReloadKey={setReloadKey} />;
-  }
 
   return (
     <main className="h-screen w-screen bg-primary-foreground">
-      {/* Sidebar and Main Content Layout */}
       <div className="h-full w-full flex flex-row">
-        {/* Sidebar */}
-
-        <div className="h-[full] w-[20%] bg-primary">
+        <div className="h-full w-[20%] bg-primary">
           <Filter />
           <div className="h-[80%] overflow-y-scroll no-scrollbar px-4">
             <SidebarLoader
-              setGameLoading={setGameLoading}
+              selectedGame={selectedGame}
               setSelectedGame={setSelectedGame}
               setScores={setScores}
               setSelectedPatch={setSelectedPatch}
@@ -168,25 +223,33 @@ function App() {
           </div>
           <Button
             onClick={logout}
-            className="h-[10%] w-full text-xl flex items-center justify-center border-t-2 border-foreground bg-foreground hover:bg-gray-900 "
+            className="h-[10%] w-full text-xl flex items-center justify-center border-t-2 border-foreground bg-foreground hover:bg-gray-900"
           >
             Log Out
           </Button>
         </div>
         <div className="h-full w-[80%] py-4">
           {gameLoading && selectedGame ? (
-            <div className="w-full h-full items-center flex justify-center">
+            <div className="w-full h-full flex flex-col items-center justify-center">
               <MoonLoader />
+              <div className="mt-4 text-lg text-gray-800">
+                {failureCount > 0
+                  ? `Rate Limited... attempting ${failureCount} of ${MAX_RETRIES}. Retrying in ${Math.ceil(
+                      getBackoffDelay(failureCount) / 1000
+                    )} seconds.`
+                  : "Loading game summary..."}
+              </div>
             </div>
           ) : selectedGame ? (
             <Tabs className="h-full w-full" defaultValue="summary">
-              <TabsList className="h-[5%] grid w-full grid-cols-3">
+              <TabsList className="h-auto grid w-full grid-cols-3">
                 <TabsTrigger value="summary">Summary</TabsTrigger>
                 <TabsTrigger value="stats">Stats</TabsTrigger>
                 <TabsTrigger value="draft">Draft</TabsTrigger>
               </TabsList>
-              <TabsContent value="summary" className="w-full  h-[95%]">
+              <TabsContent value="summary" className="w-full h-[95%]">
                 <Summary
+                  champions={champions}
                   gameSummary={gameSummary}
                   patch={selectedPatch}
                   scores={scores}
@@ -196,13 +259,29 @@ function App() {
               <TabsContent value="stats" className="h-[95%] w-full">
                 <Stats gameSummary={gameSummary} patch={selectedPatch} />
               </TabsContent>
-              <TabsContent value="draft" className="h-full w-full">
-                <Draft selectedGame={selectedGame} patch={selectedPatch} />
+              <TabsContent value="draft" className="h-[95%] w-full">
+                {isEventLogLoading ? (
+                  <div className="h-full w-full flex flex-col items-center justify-center">
+                    <MoonLoader size={40} />
+                    <div className="mt-4 text-lg text-gray-800">
+                      {eventLogFailureCount > 0 &&
+                        `Retrying... Attempt ${eventLogFailureCount} of 3. Waiting roughly ${Math.ceil(
+                          getBackoffDelay(eventLogFailureCount) / 1000
+                        )} seconds.`}
+                    </div>
+                  </div>
+                ) : (
+                  <Draft
+                    eventLog={eventLog ?? []}
+                    patch={selectedPatch}
+                    champions={champions}
+                  />
+                )}
               </TabsContent>
             </Tabs>
           ) : (
             <div className="h-full w-full text-lg font-semibold flex justify-center items-center">
-              Pick a game on the side to view its details.{" "}
+              Pick a game on the side to view its details.
             </div>
           )}
         </div>
