@@ -73,7 +73,6 @@ function App() {
   const {
     data: championJson,
     isLoading: isLoadingChampions,
-    isError: isChampionError,
     error: championError,
   } = useQuery({
     queryKey: ["championsSummary", selectedPatch],
