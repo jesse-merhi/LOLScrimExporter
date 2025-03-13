@@ -1,11 +1,10 @@
-import { getAuthToken } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { DateRange } from "react-day-picker";
 import { resultsType, SearchSelectCommand } from "./search-and-select";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
 import { DatePickerWithRange } from "./ui/daterange";
 
+import { invoke } from "@tauri-apps/api/core";
 import { SearchSelectCommandModes } from "./search-and-select-modes";
 import { Combobox } from "./ui/combobox";
 import {
@@ -83,107 +82,27 @@ function Filter() {
   }, []);
 
   async function fetchPlayersByNickname(nickname: string) {
-    const url = "https://api.grid.gg/central-data/graphql";
-    const requestBody = {
-      operationName: "GetPlayersFilter",
-      variables: {
-        first: 50,
-        nickname: { contains: nickname },
-      },
-      query: `
-        query GetPlayersFilter($nickname: StringFilter, $first: Int) {
-          players(filter: { nickname: $nickname }, first: $first) {
-            edges {
-              node {
-                id
-                nickname
-              }
-            }
-          }
-        }
-      `,
-    };
+    const players: String[] = await invoke("get_players", { search: nickname });
+    console.log(players);
 
-    try {
-      const authToken = getAuthToken();
-      if (!authToken) {
-        console.error("No auth token, please log in first.");
-        return [];
-      }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const json = await response.json();
-      const edges = json?.data?.players?.edges || [];
-      return edges.map((edge: any) => ({
-        label: edge.node.nickname,
-        value: edge.node.id,
-        // no logoUrl here, but you can add something if needed
-      }));
-    } catch (error) {
-      console.error("Error fetching Players:", error);
-      return [];
-    }
+    return players.map((player: any) => ({
+      label: player,
+      value: player,
+      // no logoUrl here, but you can add something if needed
+    }));
   }
-
-  // 2) SINGLE-FETCH for TEAMS by Name
   async function fetchTeamsByName(name: string) {
-    const url = "https://api.grid.gg/central-data/graphql";
-    const requestBody = {
-      operationName: "GetTeamsFilter",
-      variables: {
-        first: 50,
-        name: { contains: name },
-      },
-      query: `
-        query GetTeamsFilter($name: StringFilter, $first: Int) {
-          teams(filter: { name: $name }, first: $first) {
-            edges {
-              node {
-                id
-                name
-                logoUrl
-              }
-            }
-          }
-        }
-      `,
-    };
+    const teams: { team_name: string; team_logo: string }[] = await invoke(
+      "get_teams",
+      { search: name }
+    );
+    console.log(teams);
 
-    try {
-      const authToken = getAuthToken();
-      if (!authToken) {
-        console.error("No auth token, please log in first.");
-        return [];
-      }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const json = await response.json();
-      const edges = json?.data?.teams?.edges || [];
-      return edges.map((edge: any) => ({
-        label: edge.node.name,
-        value: edge.node.id,
-        logoUrl: edge.node.logoUrl,
-      }));
-    } catch (error) {
-      console.error("Error fetching Teams:", error);
-      return [];
-    }
+    return teams.map((team) => ({
+      label: team.team_name,
+      value: team.team_name,
+      logoUrl: team.team_logo,
+    }));
   }
 
   // ----------------------------------------------------------------
@@ -345,7 +264,7 @@ function Filter() {
           </div>
 
           {/* Wins / Losses */}
-          <div className="grid grid-cols-4 gap-4 items-center">
+          {/* <div className="grid grid-cols-4 gap-4 items-center">
             <Label htmlFor="wins" className="text-right">
               Wins
             </Label>
@@ -364,7 +283,7 @@ function Filter() {
               className="col-span-3"
               onCheckedChange={handleToggleLosses}
             />
-          </div>
+          </div> */}
 
           {/* Patch Input */}
           <div className="grid grid-cols-4 gap-4 items-center">

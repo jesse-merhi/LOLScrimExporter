@@ -25,3 +25,7 @@ cargo update
 cargo clean
 cargo build
 ```
+
+# How to release
+
+Change `tauri.conf.json` version, then push then merge to releases branch.

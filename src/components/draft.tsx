@@ -170,7 +170,7 @@ function Draft({ eventLog, champions, patch }: DraftProps) {
   };
 
   return (
-    <ScrollArea className="overflow-auto p-6 w-full h-full">
+    <ScrollArea className="overflow-auto px-6 w-full h-full">
       {/* Render the draft phases */}
       {/* --- Ban Phase 1 --- */}
       <div className="mb-2">
