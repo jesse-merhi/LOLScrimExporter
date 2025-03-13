@@ -39,6 +39,7 @@
     "react": "^18",
     "react-day-picker": "8.10.1",
     "react-dom": "^18",
+    "react-error-boundary": "^5.0.0",
     "react-spinners": "^0.14.1",
     "react-toastify": "^11.0.2",
     "tailwind-merge": "^2.5.5",

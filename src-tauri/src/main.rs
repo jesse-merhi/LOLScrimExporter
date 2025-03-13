@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod commands;
+mod db;
+mod sync;
 use env_logger::Builder;
 use log::LevelFilter;
 use serde_json::json;
@@ -24,13 +26,21 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        .setup(|_app| {
+            db::init();
+            Ok(())
+        })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
-            commands::filter_series,
             login,
-            logout
+            logout,
+            commands::get_games,
+            commands::start_sync,
+            commands::get_series_with_participants,
+            commands::get_players,
+            commands::get_teams
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

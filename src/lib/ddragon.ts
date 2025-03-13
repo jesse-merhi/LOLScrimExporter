@@ -69,11 +69,14 @@ export async function preloadItemImages(
     await Promise.allSettled(loaders);
 }
 
-export async function findClosestPatch(
+export function findClosestPatch(
     targetPatch: string,
     availablePatches: string[]
-): Promise<string> {
+): string {
     // If the exact patch exists, use it
+    if (!availablePatches || !targetPatch) {
+        return ""
+    }
     if (availablePatches.includes(targetPatch)) {
         return targetPatch;
     }
@@ -85,6 +88,9 @@ export async function findClosestPatch(
     );
 
     for (const patch of availablePatches) {
+        if (targetPatch.startsWith(patch)) {
+            return patch
+        }
         const diff = Math.abs(compareVersions(targetPatch, patch));
         if (diff < smallestDiff) {
             smallestDiff = diff;
@@ -97,13 +103,17 @@ export async function findClosestPatch(
 
 function compareVersions(v1: string, v2: string): number {
     const normalize = (v: string) =>
-        v
-            .replace(/[^0-9.]/g, "")
-            .split(".")
-            .map(Number);
+        v.replace(/[^0-9.]/g, "").split(".").map(Number);
     const parts1 = normalize(v1);
     const parts2 = normalize(v2);
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+
+    // If both versions have at least two segments, compare only the first two;
+    // otherwise, compare up to the number of segments in the shorter version.
+    const segmentsToCompare = (parts1.length >= 2 && parts2.length >= 2)
+        ? 2
+        : Math.min(parts1.length, parts2.length);
+
+    for (let i = 0; i < segmentsToCompare; i++) {
         const part1 = parts1[i] || 0;
         const part2 = parts2[i] || 0;
         if (part1 !== part2) {

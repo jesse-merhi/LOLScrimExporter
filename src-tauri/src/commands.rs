@@ -1,8 +1,17 @@
 // src/commands.rs
+use crate::db;
+use crate::db::models::{Participant, Series, TeamInfoStruct};
+use crate::db::schema::participants::dsl::{participants, series_id as participant_series_id};
+use crate::db::schema::participants::player_name;
+use crate::db::schema::series::dsl::series;
+use crate::sync::sync_once;
+use diesel::prelude::*;
 use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tauri::command;
+use tokio::time::sleep;
 
 // ==============================
 // Filter Configuration Types
@@ -348,12 +357,106 @@ pub async fn get_my_team_id(auth_token: String) -> Result<String, String> {
 }
 
 #[command]
-pub async fn filter_series(
-    series_details: Vec<FilteredSeriesDetail>,
+pub async fn get_games() -> Result<Vec<Series>, String> {
+    let mut connection = db::establish_db_connection();
+    series
+        .load::<Series>(&mut connection)
+        .map_err(|err| format!("Error querying database: {}", err))
+}
+
+#[command]
+pub async fn get_players(search: String) -> Result<Vec<String>, String> {
+    let mut connection = db::establish_db_connection();
+    let search_param = format!("%{}%", search);
+
+    participants
+        .select(player_name)
+        .distinct()
+        .filter(player_name.like(search_param))
+        .load::<String>(&mut connection)
+        .map_err(|err| format!("Error querying database: {}", err))
+}
+
+#[command]
+pub async fn get_teams(search: String) -> Result<Vec<TeamInfoStruct>, String> {
+    let mut connection = db::establish_db_connection();
+    let search_param = format!("%{}%", search);
+    let query = r#"
+        SELECT team_name, team_logo FROM (
+            SELECT team1_name AS team_name, team1_logo AS team_logo 
+            FROM series 
+            WHERE team1_name IS NOT NULL
+            UNION
+            SELECT team2_name AS team_name, team2_logo AS team_logo 
+            FROM series 
+            WHERE team2_name IS NOT NULL
+        ) AS teams
+        WHERE team_name LIKE ?
+    "#;
+    diesel::sql_query(query)
+        .bind::<diesel::sql_types::Text, _>(search_param)
+        .load::<TeamInfoStruct>(&mut connection)
+        .map_err(|err| format!("Error querying database: {}", err))
+}
+
+#[command]
+pub async fn start_sync(auth_token: String) -> Result<String, String> {
+    info!("Starting sync process with authentication...");
+    loop {
+        match sync_once(auth_token.clone()).await {
+            Ok(count) => info!("Sync completed: {} series updated", count),
+            Err(err) => {
+                error!("Sync error: {}", err);
+                return Err(err.to_string());
+            }
+        }
+        sleep(Duration::from_secs(600)).await; // Sync every 10 minutes
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SeriesWithParticipants {
+    pub series: Series,
+    pub participants: Vec<Participant>,
+}
+
+#[command]
+pub async fn get_series_with_participants(
     filters: FilterConfig,
     auth_token: String,
-) -> Result<Vec<FilteredSeriesDetail>, String> {
-    // Get user's team ID if wins/losses filter is enabled
+) -> Result<Vec<SeriesWithParticipants>, String> {
+    fn patch_matches(series_patch: &str, filter_patch: &str) -> bool {
+        let normalize = |s: &str| {
+            s.split('.')
+                .map(|part| part.parse::<u32>().unwrap_or(0))
+                .collect::<Vec<u32>>()
+        };
+        let series_parts = normalize(series_patch);
+        let filter_parts = normalize(filter_patch);
+
+        // Determine the number of segments to compare:
+        let segments_to_compare = if series_parts.len() >= 2 && filter_parts.len() >= 2 {
+            2
+        } else {
+            std::cmp::min(series_parts.len(), filter_parts.len())
+        };
+
+        for i in 0..segments_to_compare {
+            if series_parts[i] != filter_parts[i] {
+                return false;
+            }
+        }
+        true
+    }
+    let mut connection = db::establish_db_connection();
+
+    // Fetch all series from the database.
+    let all_series: Vec<Series> = match series.load::<Series>(&mut connection) {
+        Ok(series_result) => series_result,
+        Err(err) => return Err(format!("Error querying series: {}", err)),
+    };
+
+    // If wins/losses filtering is enabled, try to get the user's team ID.
     let mut my_team_id: Option<String> = None;
     if filters.wins || filters.losses {
         match get_my_team_id(auth_token.clone()).await {
@@ -368,44 +471,83 @@ pub async fn filter_series(
             }
         }
     }
-    let mut is_earlier_patch = false;
-    let filtered_series_details = series_details
-        .into_iter()
-        .filter(|detail| {
-            let series_state = &detail.series_state;
-            let participants = &detail.participants;
-            let patch = &detail.patch;
 
-            // ---- Filter by Patch ----
-            if !filters.patch.is_empty() && !patch.starts_with(&filters.patch) {
-                if patch < &filters.patch {
-                    is_earlier_patch = true;
-                    info!(
-                        "Series ID {} excluded due to earlier patch: {} < {}",
-                        series_state.id, patch, filters.patch
-                    );
-                } else {
-                    info!(
-                    "Series ID {} excluded due to patch mismatch: {} does not start with {}",
-                    series_state.id, patch, filters.patch
-                );
+    let mut results = Vec::new();
+
+    for series_entry in all_series {
+        // ---- Filter by Patch ----
+        if !filters.patch.is_empty() && !patch_matches(&series_entry.patch, &filters.patch) {
+            info!(
+                "Series ID {} excluded due to patch mismatch: {} does not match {}",
+                series_entry.series_id, series_entry.patch, filters.patch
+            );
+            continue;
+        }
+
+        // ---- Filter by Date Range ----
+        if filters.date_range.from.is_some() || filters.date_range.to.is_some() {
+            if let Some(ref start_time) = series_entry.start_time_scheduled {
+                if let Some(ref from_date) = filters.date_range.from {
+                    if start_time < from_date {
+                        info!(
+                            "Series ID {} excluded because start time {} is before {}",
+                            series_entry.series_id, start_time, from_date
+                        );
+                        continue;
+                    }
                 }
-                return false;
+                if let Some(ref to_date) = filters.date_range.to {
+                    if start_time > to_date {
+                        info!(
+                            "Series ID {} excluded because start time {} is after {}",
+                            series_entry.series_id, start_time, to_date
+                        );
+                        continue;
+                    }
+                }
+            } else {
+                // Exclude series with no start time if a date range is specified.
+                info!(
+                    "Series ID {} excluded because it has no start time for date filtering",
+                    series_entry.series_id
+                );
+                continue;
             }
+        }
 
-            // ---- Filter by Wins/Losses ----
-            if (filters.wins || filters.losses) && series_state.teams.len() >= 2 && my_team_id.is_some() {
-                let my_team_id_ref = my_team_id.as_ref().unwrap();
-                let team1 = &series_state.teams[0];
-                let team2 = &series_state.teams[1];
+        // ---- Filter by Wins/Losses ----
+        if filters.wins || filters.losses {
+            // Ensure both team IDs and scores exist.
+            if series_entry.team1_id.is_none()
+                || series_entry.team2_id.is_none()
+                || series_entry.team1_score.is_none()
+                || series_entry.team2_score.is_none()
+            {
+                info!(
+                    "Series ID {} excluded because team information is missing",
+                    series_entry.series_id
+                );
+                continue;
+            }
+            let team1_id = series_entry.team1_id.clone().unwrap();
+            let team2_id = series_entry.team2_id.clone().unwrap();
+            let team1_score = series_entry.team1_score.unwrap();
+            let team2_score = series_entry.team2_score.unwrap();
 
-                let is_team1 = &team1.id == my_team_id_ref;
-                let is_team2 = &team2.id == my_team_id_ref;
+            if let Some(ref my_team) = my_team_id {
+                // Exclude series that do not involve the user's team.
+                if &team1_id != my_team && &team2_id != my_team {
+                    info!(
+                        "Series ID {} excluded because it doesn't involve my team",
+                        series_entry.series_id
+                    );
+                    continue;
+                }
 
-                let my_team_won = (is_team1 && team1.score >= team2.score)
-                    || (is_team2 && team2.score >= team1.score);
-                let my_team_lost = (is_team1 && team1.score < team2.score)
-                    || (is_team2 && team2.score < team1.score);
+                let my_team_won = (team1_id == *my_team && team1_score >= team2_score)
+                    || (team2_id == *my_team && team2_score >= team1_score);
+                let my_team_lost = (team1_id == *my_team && team1_score < team2_score)
+                    || (team2_id == *my_team && team2_score < team1_score);
 
                 let show_wins = filters.wins && my_team_won;
                 let show_losses = filters.losses && my_team_lost;
@@ -413,70 +555,127 @@ pub async fn filter_series(
                 if !(show_wins || show_losses) {
                     info!(
                         "Series ID {} excluded based on win/loss filters",
-                        series_state.id
+                        series_entry.series_id
                     );
-                    return false;
+                    continue;
                 }
             }
+        }
 
-            // ---- Filter by Champions Picked ----
-            if !filters.champions_picked.is_empty() {
-                let picked_champions: Vec<String> = filters
-                    .champions_picked
-                    .iter()
-                    .map(|c| c.champ.clone())
-                    .collect();
-                match filters.champ_picked_mode {
-                    Modes::Any => {
-                        let picked_in_game = picked_champions
-                            .iter()
-                            .any(|champ| participants.iter().any(|p| &p.champion_name == champ));
-                        if !picked_in_game {
-                            info!(
-                                "Series ID {} excluded because no picked champions were found in the game",
-                                series_state.id
-                            );
-                            return false;
-                        }
-                    }
-                    Modes::Only => {
-                        let picked_in_game = picked_champions
-                            .iter()
-                            .all(|champ| participants.iter().any(|p| &p.champion_name == champ));
-                        if !picked_in_game {
-                            info!(
-                                "Series ID {} excluded because not all picked champions were found in the game",
-                                series_state.id
-                            );
-                            return false;
-                        }
-                    }
-                };
+        // ---- Filter by Teams ----
+        if !filters.teams.is_empty() {
+            let allowed_team_names: Vec<String> =
+                filters.teams.iter().map(|t| t.value.clone()).collect();
+            let team1_ok = series_entry
+                .team1_name
+                .as_ref()
+                .map(|name| allowed_team_names.contains(name))
+                .unwrap_or(false);
+            let team2_ok = series_entry
+                .team2_name
+                .as_ref()
+                .map(|name| allowed_team_names.contains(name))
+                .unwrap_or(false);
+            if !team1_ok && !team2_ok {
+                info!(
+                    "Series ID {} excluded due to team filter",
+                    series_entry.series_id
+                );
+                continue;
             }
+        }
 
-            // ---- Filter by Champions Banned ----
-            if !filters.champions_banned.is_empty() {
-                let banned_champions: Vec<String> = filters
-                    .champions_banned
-                    .iter()
-                    .map(|c| c.champ.clone())
-                    .collect();
-                let banned_in_game = participants
-                    .iter()
-                    .any(|p| banned_champions.contains(&p.champion_name));
-                info!("Banned in game: {}", banned_in_game);
-                info!("Banned champions: {:?}", banned_champions);
-                if banned_in_game {
-                    info!(
-                        "Series ID {} excluded because banned champions were found in the game",
-                        series_state.id
-                    );
-                    return false;
+        // ---- Fetch Participants for this Series ----
+        let series_id_val = series_entry.series_id.clone();
+        let all_participants: Vec<Participant> = match participants
+            .filter(participant_series_id.eq(&series_id_val))
+            .load::<Participant>(&mut connection)
+        {
+            Ok(participants_val) => participants_val,
+            Err(err) => {
+                return Err(format!(
+                    "Error querying participants for series {}: {}",
+                    series_id_val, err
+                ));
+            }
+        };
+
+        // ---- Filter by Champions Picked ----
+        if !filters.champions_picked.is_empty() {
+            let picked_champions: Vec<String> = filters
+                .champions_picked
+                .iter()
+                .map(|c| c.champ.clone())
+                .collect();
+            match filters.champ_picked_mode {
+                Modes::Any => {
+                    let picked_in_game = picked_champions
+                        .iter()
+                        .any(|champ| all_participants.iter().any(|p| p.champion_name == *champ));
+                    if !picked_in_game {
+                        info!(
+                            "Series ID {} excluded because no picked champions were found",
+                            series_entry.series_id
+                        );
+                        continue;
+                    }
+                }
+                Modes::Only => {
+                    let picked_in_game = picked_champions
+                        .iter()
+                        .all(|champ| all_participants.iter().any(|p| p.champion_name == *champ));
+                    if !picked_in_game {
+                        info!(
+                            "Series ID {} excluded because not all picked champions were found",
+                            series_entry.series_id
+                        );
+                        continue;
+                    }
                 }
             }
+        }
 
-            true
-        })
-        .collect::<Vec<FilteredSeriesDetail>>();
-    Ok(filtered_series_details)
+        // ---- Filter by Champions Banned ----
+        if !filters.champions_banned.is_empty() {
+            let banned_champions: Vec<String> = filters
+                .champions_banned
+                .iter()
+                .map(|c| c.champ.clone())
+                .collect();
+            let banned_in_game = all_participants
+                .iter()
+                .any(|p| banned_champions.contains(&p.champion_name));
+            if banned_in_game {
+                info!(
+                    "Series ID {} excluded because banned champions were found",
+                    series_entry.series_id
+                );
+                continue;
+            }
+        }
+
+        // ---- Filter by Players ----
+        if !filters.players.is_empty() {
+            let allowed_player_names: Vec<String> =
+                filters.players.iter().map(|p| p.value.clone()).collect();
+            let player_found = all_participants
+                .iter()
+                .any(|p| allowed_player_names.contains(&p.player_name));
+            if !player_found {
+                info!(
+                    "Series ID {} excluded because none of the players match the filter",
+                    series_entry.series_id
+                );
+                continue;
+            }
+        }
+
+        // If the series passed all filters, include it along with its participants.
+        results.push(SeriesWithParticipants {
+            series: series_entry,
+            participants: all_participants,
+        });
+    }
+
+    Ok(results)
 }
