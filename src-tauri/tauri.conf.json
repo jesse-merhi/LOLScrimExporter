@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "lolscrimexporter",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "identifier": "com.lolscrimexporter.app",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -25,9 +25,11 @@
     }
   },
   "plugins": {
-    "updater":{
-      "pubkey":"dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzOEIxNjUxODQ5RDA1OTgKUldTWUJaMkVVUmFMZzNSWVVrVUhmci8rWmthZmFkRk1LU0NJcTFzekxpbHdSZmx6cTVEb2dSNFAK",
-      "endpoints":["https://github.com/jesse-merhi/LOLScrimExporter/releases/latest/download/latest.json"]
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzOEIxNjUxODQ5RDA1OTgKUldTWUJaMkVVUmFMZzNSWVVrVUhmci8rWmthZmFkRk1LU0NJcTFzekxpbHdSZmx6cTVEb2dSNFAK",
+      "endpoints": [
+        "https://github.com/jesse-merhi/LOLScrimExporter/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {
@@ -41,5 +43,5 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": true
-  } 
+  }
 }
