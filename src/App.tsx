@@ -21,7 +21,6 @@ import { Button } from "./components/ui/button";
 import { fetchChampionData, findClosestPatch } from "./lib/ddragon";
 import { Participant } from "./lib/types/types";
 import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
-const MAX_RETRIES = 10;
 
 function App() {
   const [reloadKey, setReloadKey] = useState(0);

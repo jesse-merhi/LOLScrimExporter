@@ -198,8 +198,8 @@ function Filter() {
   // ----------------------------------------------------------------
   // Example usage with ShadCN <Checkbox> you might want to store these changes in state
   // So that we can reflect them in localStorage on "Save changes"
-  const handleToggleWins = () => setWins((prev) => !prev);
-  const handleToggleLosses = () => setLosses((prev) => !prev);
+  // const handleToggleWins = () => setWins((prev) => !prev);
+  // const handleToggleLosses = () => setLosses((prev) => !prev);
 
   // We'll do something similar for patch input
   const handlePatchChange = (e: string) => {
