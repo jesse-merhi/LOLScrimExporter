@@ -1,23 +1,28 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
+import { CircleX, RefreshCcw } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import MoonLoader from "react-spinners/MoonLoader";
 import "./App.css";
-import AppErrorBoundary from "./components/AppErrorBoundary";
 import Draft, { DraftLog } from "./components/draft";
+import ErrorPage from "./components/ErrorPage";
 import Filter from "./components/filter";
-import {
-  default as Loader,
-  default as LoadingPage,
-} from "./components/LoadingPage";
+import { default as LoadingPage } from "./components/LoadingPage";
 import Login from "./components/login";
 import SidebarLoader from "./components/sidebar-loader";
 import Stats from "./components/stats";
 import Summary from "./components/summary";
 import { Button } from "./components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./components/ui/tooltip";
 import { fetchChampionData, findClosestPatch } from "./lib/ddragon";
 import { Participant } from "./lib/types/types";
 import { authIsExpired, getAuthToken, getRefreshToken } from "./lib/utils";
@@ -65,7 +70,7 @@ function App() {
   const { data: champions } = useQuery({
     queryKey: ["championsSummary", closestPatch],
     queryFn: () => fetchChampionData(closestPatch),
-    enabled: !!selectedPatch && !!patches,
+    enabled: !!closestPatch,
     retry: true,
   });
 
@@ -122,6 +127,13 @@ function App() {
     retry: 3,
   });
 
+  const dbMutation = useMutation({
+    mutationFn: () => invoke("clear_db"),
+    onSettled: () => {
+      document.location.reload();
+    },
+  });
+
   const checkForUpdates = async () => {
     const update = await check();
     if (update) {
@@ -172,9 +184,46 @@ function App() {
       <div className="h-full w-full flex flex-row">
         <div className="h-full w-[20%] bg-primary">
           <Filter />
-          <div className="h-[80%] overflow-y-scroll no-scrollbar px-4">
-            <AppErrorBoundary>
-              <Suspense fallback={<Loader />}>
+          <div className="w-full h-[5%]">
+            {" "}
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="w-[50%] bg-foreground rounded-none hover:bg-gray-900"
+                    onClick={() => document.location.reload()}
+                  >
+                    <RefreshCcw />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Refresh Series</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="w-[50%] bg-foreground rounded-none hover:bg-gray-900"
+                    onClick={() => dbMutation.mutate()}
+                  >
+                    <CircleX />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Clear Database</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className="h-[75%] overflow-y-scroll no-scrollbar px-4">
+            <ErrorBoundary
+              FallbackComponent={({ error }) => (
+                <ErrorPage
+                  resetErrorBoundary={() => document.location.reload()}
+                  error={error}
+                  color="dark"
+                />
+              )}
+            >
+              <Suspense fallback={<LoadingPage mode="dark" />}>
                 <SidebarLoader
                   selectedGame={selectedGame}
                   setSelectedGame={setSelectedGame}
@@ -183,7 +232,7 @@ function App() {
                   setParticipants={setParticipants}
                 />
               </Suspense>
-            </AppErrorBoundary>
+            </ErrorBoundary>
           </div>
           <Button
             onClick={logout}
@@ -192,44 +241,59 @@ function App() {
             Log Out
           </Button>
         </div>
-        <AppErrorBoundary>
-          <Suspense fallback={<LoadingPage />}>
-            <div className="h-full w-[80%] pt-4">
-              {selectedGame && champions && champions.data ? (
-                <Tabs className="h-full w-full" defaultValue="summary">
-                  <TabsList className="h-auto grid w-full grid-cols-3">
-                    <TabsTrigger value="summary">Summary</TabsTrigger>
-                    <TabsTrigger value="stats">Stats</TabsTrigger>
-                    <TabsTrigger value="draft">Draft</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="summary" className="w-full h-[95%]">
-                    <Summary
-                      champions={champions.data}
-                      participants={participants}
-                      patch={closestPatch}
-                      scores={scores}
-                      gameId={selectedGame}
-                    />
-                  </TabsContent>
-                  <TabsContent value="stats" className="h-[95%] w-full">
-                    <Stats participants={participants} patch={closestPatch} />
-                  </TabsContent>
-                  <TabsContent value="draft" className="h-[95%] w-full">
-                    <Draft
-                      eventLog={eventLog ?? []}
-                      patch={closestPatch}
-                      champions={champions.data}
-                    />
-                  </TabsContent>
-                </Tabs>
-              ) : (
-                <div className="h-full w-full text-lg font-semibold flex justify-center items-center">
-                  Pick a game on the side to view its details.
-                </div>
-              )}
-            </div>
-          </Suspense>
-        </AppErrorBoundary>
+        <ErrorBoundary
+          FallbackComponent={({ error }) => (
+            <ErrorPage
+              error={error}
+              color="light"
+              resetErrorBoundary={() => document.location.reload()}
+            />
+          )}
+        >
+          <div className="h-full w-[80%] pt-4">
+            {selectedGame ? (
+              <Tabs className="h-full w-full" defaultValue="summary">
+                <TabsList className="h-auto grid w-full grid-cols-3">
+                  <TabsTrigger value="summary">Summary</TabsTrigger>
+                  <TabsTrigger value="stats">Stats</TabsTrigger>
+                  <TabsTrigger value="draft">Draft</TabsTrigger>
+                </TabsList>
+                <Suspense fallback={<LoadingPage mode="light" size={35} />}>
+                  {champions && (
+                    <>
+                      <TabsContent value="summary" className="w-full h-[95%]">
+                        <Summary
+                          champions={champions.data}
+                          participants={participants}
+                          patch={closestPatch}
+                          scores={scores}
+                          gameId={selectedGame}
+                        />
+                      </TabsContent>
+                      <TabsContent value="stats" className="h-[95%] w-full">
+                        <Stats
+                          participants={participants}
+                          patch={closestPatch}
+                        />
+                      </TabsContent>
+                      <TabsContent value="draft" className="h-[95%] w-full">
+                        <Draft
+                          eventLog={eventLog ?? []}
+                          patch={closestPatch}
+                          champions={champions.data}
+                        />
+                      </TabsContent>
+                    </>
+                  )}
+                </Suspense>
+              </Tabs>
+            ) : (
+              <div className="h-full w-full text-lg font-semibold flex justify-center items-center">
+                Pick a game on the side to view its details.
+              </div>
+            )}
+          </div>
+        </ErrorBoundary>
       </div>
     </main>
   );

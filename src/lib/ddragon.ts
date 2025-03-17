@@ -1,4 +1,7 @@
-export async function fetchChampionData(patch: string) {
+import { GameStats } from "./types/gameStats";
+import { Participant } from "./types/types";
+
+export async function fetchChampionData(patch: string | undefined) {
     const response = await fetch(
         `https://ddragon.leagueoflegends.com/cdn/${patch}/data/en_US/champion.json`
     );
@@ -12,13 +15,16 @@ export async function fetchChampionData(patch: string) {
  * For each champion, create a new Image() and wait for it to load.
  * Returns when ALL champion images have been fetched or at least attempted.
  */
-export async function preloadChampionImages(
-    patch: string
-) {
-    const championJson = await fetchChampionData(patch)
-    const champions: Record<string, { image: { full: String } }> = championJson.data;
+export async function preloadChampionImages(patch: string, participants: Participant[]) {
+    // Artificial delay for testing Suspense
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const loaders = Object.values(champions).map((champ) => {
+    const championJson = await fetchChampionData(patch);
+    const champions: Record<string, { image: { full: string }, id: string }> = championJson.data;
+    console.log(Object.values(champions).filter((champ) => participants.some((particpant) => particpant.champion_name == champ.id)))
+
+
+    const loaders = Object.values(champions).filter((champ) => participants.some((particpant) => particpant.champion_name == champ.id)).map((champ) => {
         const imageUrl = `https://ddragon.leagueoflegends.com/cdn/${patch}/img/champion/${champ.image.full}`;
         return new Promise<void>((resolve, reject) => {
             const img = new Image();
@@ -28,11 +34,9 @@ export async function preloadChampionImages(
         });
     });
 
-    // Wait until all images either load or error out
-    await Promise.allSettled(loaders);
-    // Optionally handle errors vs. successes,
-    // but typically we just want to ensure they've at least been requested.
+    return Promise.allSettled(loaders);
 }
+
 
 export async function fetchItemData(patch: string) {
     const response = await fetch(
@@ -52,12 +56,14 @@ export async function fetchItemData(patch: string) {
  * Returns when ALL item images have been fetched or at least attempted.
  */
 export async function preloadItemImages(
-    patch: string
+    patch: string,
+    participants: Participant[]
 ) {
     const itemJson = await fetchItemData(patch)
+    const reqItems = getItemIdsFromParticipants(participants);
     const items: Record<string, { image: { full: String } }> = itemJson.data;
-    const loaders = Object.values(items).map((item) => {
-        const imageUrl = `https://ddragon.leagueoflegends.com/cdn/${patch}/img/item/${item.image.full}`;
+    const loaders = Object.entries(items).filter((item) => reqItems.includes(Number(item[0]))).map((item) => {
+        const imageUrl = `https://ddragon.leagueoflegends.com/cdn/${patch}/img/item/${item[1].image.full}`;
         return new Promise<void>((resolve, reject) => {
             const img = new Image();
             img.src = imageUrl;
@@ -66,9 +72,13 @@ export async function preloadItemImages(
         });
     });
 
-    await Promise.allSettled(loaders);
+    return Promise.allSettled(loaders);
 }
 
+export function getItemIdsFromParticipants(participants: Participant[]) {
+    const stats = participants.map((participant) => JSON.parse(participant.stats_json) as GameStats);
+    return stats.flatMap((stat) => [stat.item0, stat.item1, stat.item2, stat.item3, stat.item4, stat.item5])
+}
 export function findClosestPatch(
     targetPatch: string,
     availablePatches: string[]

@@ -414,6 +414,41 @@ pub async fn start_sync(auth_token: String) -> Result<String, String> {
     }
 }
 
+#[command]
+pub async fn clear_db() -> Result<String, String> {
+    use crate::db::schema::participants::dsl::participants;
+    use crate::db::schema::series::dsl::series;
+    use diesel::result::Error;
+
+    let mut connection = db::establish_db_connection();
+
+    connection
+        .transaction::<_, Error, _>(|conn| {
+            let deleted_participants =
+                diesel::delete(participants).execute(conn).map_err(|err| {
+                    error!("Error clearing participants table: {}", err);
+                    err
+                })?;
+            let deleted_series = diesel::delete(series).execute(conn).map_err(|err| {
+                error!("Error clearing series table: {}", err);
+                err
+            })?;
+
+            info!(
+                "Database cleared: {} participants and {} series deleted.",
+                deleted_participants, deleted_series
+            );
+            Ok((deleted_participants, deleted_series))
+        })
+        .map(|(deleted_participants, deleted_series)| {
+            format!(
+                "Database cleared: {} participants and {} series deleted.",
+                deleted_participants, deleted_series
+            )
+        })
+        .map_err(|err| format!("Failed to clear database: {}", err))
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct SeriesWithParticipants {
     pub series: Series,
@@ -675,6 +710,10 @@ pub async fn get_series_with_participants(
             series: series_entry,
             participants: all_participants,
         });
+    }
+
+    if results.len() == 0 {
+        return Err("No Series Found.".to_string());
     }
 
     Ok(results)

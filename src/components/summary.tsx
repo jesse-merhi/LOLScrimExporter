@@ -9,7 +9,9 @@ import MoonLoader from "react-spinners/MoonLoader";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import { preloadChampionImages, preloadItemImages } from "@/lib/ddragon";
 import { Participant } from "@/lib/types/types";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
 
@@ -27,7 +29,15 @@ function Summary({
   gameId: string;
 }) {
   const [loading, setLoading] = useState(false);
+  useSuspenseQuery({
+    queryKey: ["championImages", patch, participants],
+    queryFn: () => preloadChampionImages(patch, participants),
+  });
 
+  useSuspenseQuery({
+    queryKey: ["itemImages", patch, participants],
+    queryFn: () => preloadItemImages(patch, participants),
+  });
   const downloadFile = async () => {
     const authToken = getAuthToken();
     if (!authToken) {

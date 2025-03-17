@@ -23,6 +23,7 @@ function Stats({
   const [champions, setChampions] = useState<Record<string, Champion> | null>(
     null
   );
+
   useEffect(() => {
     const fetchChamps = async () => {
       const response = await fetch(
@@ -40,6 +41,7 @@ function Stats({
       .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2") // Handle consecutive capitals
       .replace(/^./, (str) => str.toUpperCase()); // Capitalize the first letter
   }
+
   if (!champions) {
     return <MoonLoader size={25} color="white" />;
   }
