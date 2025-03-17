@@ -715,6 +715,17 @@ pub async fn get_series_with_participants(
     if results.len() == 0 {
         return Err("No Series Found.".to_string());
     }
+    results.sort_by(|a, b| {
+        match (
+            &a.series.start_time_scheduled,
+            &b.series.start_time_scheduled,
+        ) {
+            (Some(a_time), Some(b_time)) => b_time.cmp(a_time),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
 
     Ok(results)
 }

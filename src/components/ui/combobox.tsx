@@ -30,9 +30,15 @@ export function Combobox({
   id,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
+  const handleOpenChange = (isOpen: boolean) => {
+    console.log("onOpenChange called", { isOpen, currentOpenState: open });
+    console.trace("Stack trace for onOpenChange");
+
+    setOpen(isOpen);
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"

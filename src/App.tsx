@@ -184,6 +184,7 @@ function App() {
       <div className="h-full w-full flex flex-row">
         <div className="h-full w-[20%] bg-primary">
           <Filter />
+
           <div className="w-full h-[5%]">
             {" "}
             <TooltipProvider delayDuration={300}>
