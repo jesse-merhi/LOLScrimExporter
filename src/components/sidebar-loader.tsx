@@ -7,10 +7,13 @@ import {
   SeriesWithParticipants,
 } from "@/lib/types/types";
 import { getAuthToken } from "@/lib/utils";
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import {
+  QueryFunctionContext,
+  useQuery,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import MoonLoader from "react-spinners/MoonLoader";
 
 /**
  * One page of data from the infinite query:
@@ -47,8 +50,6 @@ function SidebarLoader({
   setParticipants,
 }: SidebarLoaderProps) {
   const [filters, setFilters] = useState<FilterConfig | null>(null);
-  const [loadingStatus, setLoadingStatus] = useState<string>("");
-  console.log(filters);
 
   /** Load filter config on mount + whenever filtersUpdated event is fired */
   useEffect(() => {
@@ -79,7 +80,6 @@ function SidebarLoader({
   async function queryFn(
     ctx: QueryFunctionContext<["SidebarLoader", FilterConfig | null]>
   ): Promise<SeriesWithParticipants[]> {
-    setLoadingStatus("Fetching series list...");
     const [, currentFilters] = ctx.queryKey;
     const authToken = getAuthToken();
 
@@ -95,108 +95,93 @@ function SidebarLoader({
     });
   }
 
-  const { data } = useQuery({
+  async function start_sync() {
+    const TEN_MINUTES = 10 * 60 * 1000;
+    const now = Date.now();
+    const lastSyncStr = localStorage.getItem("lastSync");
+
+    if (lastSyncStr && now - parseInt(lastSyncStr, 10) < TEN_MINUTES) {
+      console.log(
+        "Sync was triggered less than 10 minutes ago; skipping sync."
+      );
+      return null;
+    }
+
+    // Update the timestamp and trigger the sync.
+    localStorage.setItem("lastSync", now.toString());
+    await invoke("start_sync", {
+      authToken: getAuthToken(),
+    });
+    return null;
+  }
+
+  const { data } = useSuspenseQuery({
     queryKey: ["SidebarLoader", filters],
     queryFn,
-    enabled: !!filters,
-    retry: 30,
-    staleTime: 60 * 60 * 5,
+    retry: true,
+    staleTime: 5,
   });
+
   useQuery({
     queryKey: ["startSync", data],
-    queryFn: async () => {
-      return await invoke("start_sync", {
-        authToken: getAuthToken(),
-      });
-    },
+    queryFn: start_sync,
     // Only run this if filters are set and the main data returns empty.
     enabled: data !== undefined && data.length === 0,
     retry: false,
-    staleTime: Infinity,
   });
 
-  if (!data) {
-    return (
-      <div className="py-2 w-full flex flex-col justify-center items-center text-center gap-2">
-        <MoonLoader size={25} color="white" />
-        {loadingStatus && (
-          <div className="text-sm text-accent text-gray-100">
-            {loadingStatus}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (data.length === 0) {
-    return (
-      <div className="py-2 w-full h-full flex flex-col justify-center items-center text-center gap-2 text-gray-100">
-        No Games Found for this Criteria
-      </div>
-    );
-  }
-
   return (
-    <div>
-      {!data ? (
-        <div className="text-sm text-accent text-gray-100">
-          No series found.
-        </div>
-      ) : (
-        data.map((edge) => {
-          const series = edge.series;
-          const series_id = series.series_id;
-          const team1Score = series.team1_score || 0;
-          const team2Score = series.team2_score || 0;
-          const patch = series.patch;
-          const startTimeScheduled = series.start_time_scheduled;
-          const team1_logo = series.team1_logo;
-          const team2_logo = series.team2_logo;
-          const participants = edge.participants;
+    <>
+      {data.map((edge) => {
+        const series = edge.series;
+        const series_id = series.series_id;
+        const team1Score = series.team1_score || 0;
+        const team2Score = series.team2_score || 0;
+        const patch = series.patch;
+        const startTimeScheduled = series.start_time_scheduled;
+        const team1_logo = series.team1_logo;
+        const team2_logo = series.team2_logo;
+        const participants = edge.participants;
 
-          return (
-            <div
-              key={series_id}
-              className={`w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer  ${
-                selectedGame == series_id
-                  ? "bg-slate-800"
-                  : "hover:bg-slate-800"
-              }`}
-              onClick={async () => {
-                setSelectedGame(String(series_id));
-                setParticipants(participants.slice(0, 10));
-                setScores([team1Score, team2Score]);
-                if (patch) {
-                  setSelectedPatch(patch);
-                  setLoadingStatus(""); // Clear status
-                }
-              }}
-            >
-              <div>
-                {startTimeScheduled
-                  ? new Date(startTimeScheduled).toLocaleString("en", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                    })
-                  : "no time"}
-              </div>
-              <div className="h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer">
-                {team1_logo && (
-                  <img src={team1_logo} className="h-full" alt="Team 1" />
-                )}
-                <div>
-                  {team1Score} x {team2Score}
-                </div>
-                {team2_logo && (
-                  <img src={team2_logo} className="h-full" alt="Team 2" />
-                )}
-              </div>
+        return (
+          <div
+            key={series_id}
+            className={`w-full border-b-2 text-accent flex-col flex justify-center items-center p-2 cursor-pointer  ${
+              selectedGame == series_id ? "bg-slate-800" : "hover:bg-slate-800"
+            }`}
+            onClick={async () => {
+              setSelectedGame(String(series_id));
+              setParticipants(participants.slice(0, 10));
+              setScores([team1Score, team2Score]);
+              if (patch) {
+                setSelectedPatch(patch);
+              }
+            }}
+          >
+            <div>
+              {startTimeScheduled
+                ? new Date(startTimeScheduled).toLocaleString("en", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                  })
+                : "no time"}
             </div>
-          );
-        })
-      )}
-    </div>
+            <div className="h-12 w-full text-accent flex justify-center items-center p-2 cursor-pointer">
+              {team1_logo && (
+                <img src={team1_logo} className="h-full" alt="Team 1" />
+              )}
+              <div>
+                {team1Score} x {team2Score}
+              </div>
+              {team2_logo && (
+                <img src={team2_logo} className="h-full" alt="Team 2" />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 

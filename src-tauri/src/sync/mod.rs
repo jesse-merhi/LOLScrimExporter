@@ -105,6 +105,7 @@ pub async fn sync_once(auth_token: String) -> Result<usize, String> {
                 .expect("Error loading series");
 
             if let Some(existing) = existing_series {
+                info!("Found Existing Series for {}", series_id_val);
                 // Compare stored details with the new ones
                 let details_same = existing.finished == finished_val
                     && existing.start_time_scheduled.as_deref() == start_time_val
@@ -255,10 +256,10 @@ async fn fetch_game_summary_with_retry(
                 if let Some(participants_array) = summary_json["participants"].as_array() {
                     for participant_item in participants_array {
                         // Extract a unique identifier for the participant
-                        let player_id_val = participant_item["playerId"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
+                        let player_id_val = participant_item["summonerId"]
+                            .as_number()
+                            .map(|num| num.to_string())
+                            .unwrap_or_default();
 
                         // Check if this participant already exists for the given series
                         let existing_participant = p::participants

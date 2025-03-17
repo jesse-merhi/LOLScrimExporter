@@ -40,7 +40,8 @@ fn main() {
             commands::start_sync,
             commands::get_series_with_participants,
             commands::get_players,
-            commands::get_teams
+            commands::get_teams,
+            commands::clear_db
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
