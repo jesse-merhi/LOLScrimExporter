@@ -206,6 +206,15 @@ pub async fn sync_once(auth_token: String) -> Result<usize, String> {
                     ),
                 }
             }
+            match fetch_and_store_event_log(&client, series_id_val, &mut connection, &auth_token)
+                .await
+            {
+                Ok(_) => info!("Event log saved for series {}", series_id_val),
+                Err(err) => error!(
+                    "Failed to save event log for series {}: {}",
+                    series_id_val, err
+                ),
+            }
         }
 
         let page_info = json["data"]["allSeries"]["pageInfo"].clone();
@@ -217,6 +226,120 @@ pub async fn sync_once(auth_token: String) -> Result<usize, String> {
 
     info!("Synced {} series", inserted_count);
     Ok(inserted_count)
+}
+
+async fn fetch_and_store_event_log(
+    client: &Client,
+    series_id: &str,
+    connection: &mut SqliteConnection,
+    auth_token: &str,
+) -> Result<(), String> {
+    let event_log_url = "https://lol.grid.gg/api/event-explorer-api/events/graphql";
+    let graphql_query = serde_json::json!({
+        "operationName": "getSeriesEvents",
+        "variables": {
+            "id": series_id,
+            "filter": {
+                "event": [
+                    { "type": { "eq": "team-banned-character" } },
+                    { "type": { "eq": "team-picked-character" } },
+                    { "type": { "eq": "grid-validated-series" } }
+                ]
+            }
+        },
+        "query": "query getSeriesEvents($id: String!, $filter: EventsFilter, $after: Cursor) {
+            events(seriesId: $id, filter: $filter, after: $after) {
+                edges {
+                    node {
+                        type
+                        sentenceChunks {
+                            text
+                            strikethrough
+                        }
+                    }
+                }
+            }
+        }"
+    });
+
+    let mut attempts = 0;
+    while attempts < MAX_RETRIES {
+        let response = client
+            .post(event_log_url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", auth_token))
+            .json(&graphql_query)
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) if resp.status().is_success() => {
+                let json: Value = resp.json().await.map_err(|err| err.to_string())?;
+                let event_edges = json["data"]["events"]["edges"].clone();
+                let event_log_str =
+                    serde_json::to_string(&event_edges).map_err(|err| err.to_string())?;
+
+                // Insert or update the event log in the database.
+                use crate::db::schema::event_logs::dsl as e;
+                let existing_event_log = e::event_logs
+                    .filter(e::series_id.eq(series_id))
+                    .first::<crate::db::models::EventLog>(connection)
+                    .optional()
+                    .expect("Error loading event log");
+
+                if let Some(_) = existing_event_log {
+                    let update_result =
+                        diesel::update(e::event_logs.filter(e::series_id.eq(series_id)))
+                            .set(crate::db::schema::event_logs::event_log.eq(&event_log_str))
+                            .execute(connection);
+                    match update_result {
+                        Ok(_) => info!("Updated event log for series {}", series_id),
+                        Err(err) => error!(
+                            "Failed to update event log for series {}: {}",
+                            series_id, err
+                        ),
+                    }
+                } else {
+                    let new_event_log = crate::db::models::NewEventLog {
+                        series_id,
+                        event_log: &event_log_str,
+                    };
+                    match diesel::insert_into(e::event_logs)
+                        .values(&new_event_log)
+                        .execute(connection)
+                    {
+                        Ok(_) => info!("Inserted event log for series {}", series_id),
+                        Err(err) => error!(
+                            "Failed to insert event log for series {}: {}",
+                            series_id, err
+                        ),
+                    }
+                }
+                return Ok(());
+            }
+            Ok(resp) if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS => {
+                let delay = (2_u64).pow(attempts);
+                warn!(
+                    "Rate limited fetching event log. Retrying in {:?} seconds...",
+                    delay
+                );
+                sleep(Duration::from_secs(delay)).await;
+            }
+            Ok(resp) => {
+                warn!(
+                    "Unexpected response fetching event log: {:?}. Retrying...",
+                    resp
+                );
+                sleep(Duration::from_secs((2_u64).pow(attempts))).await;
+            }
+            Err(err) => {
+                warn!("Network error fetching event log: {}. Retrying...", err);
+                sleep(Duration::from_secs((2_u64).pow(attempts))).await;
+            }
+        }
+        attempts += 1;
+    }
+    Err("Max retries reached for event log".to_string())
 }
 
 async fn fetch_game_summary_with_retry(

@@ -454,12 +454,12 @@ pub struct SeriesWithParticipants {
     pub series: Series,
     pub participants: Vec<Participant>,
 }
-
 #[command]
 pub async fn get_series_with_participants(
     filters: FilterConfig,
     auth_token: String,
 ) -> Result<Vec<SeriesWithParticipants>, String> {
+    // Helper to check if two patch strings match for the first segments.
     fn patch_matches(series_patch: &str, filter_patch: &str) -> bool {
         let normalize = |s: &str| {
             s.split('.')
@@ -483,6 +483,39 @@ pub async fn get_series_with_participants(
         }
         true
     }
+
+    // Helper to extract banned champions from an event log string.
+    // This expects the event log to be a JSON array where each element is an object like:
+    // { "node": { "type": "team-banned-character", "sentenceChunks": [ { "text": "Blue" }, { "text": "banned" }, { "text": "ChampionName" } ] } }
+    fn extract_banned_champions(event_log_str: &str) -> Vec<String> {
+        let mut banned = Vec::new();
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(event_log_str) {
+            if let Some(events) = json_value.as_array() {
+                for event in events {
+                    if let Some(node) = event.get("node") {
+                        if let Some(event_type) = node.get("type").and_then(|v| v.as_str()) {
+                            if event_type == "team-banned-character" {
+                                if let Some(chunks) =
+                                    node.get("sentenceChunks").and_then(|v| v.as_array())
+                                {
+                                    // Expect at least three chunks: [team, "banned", champion]
+                                    if chunks.len() >= 3 {
+                                        if let Some(champion) =
+                                            chunks[2].get("text").and_then(|v| v.as_str())
+                                        {
+                                            banned.push(champion.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        banned
+    }
+
     let mut connection = db::establish_db_connection();
 
     // Fetch all series from the database.
@@ -541,7 +574,6 @@ pub async fn get_series_with_participants(
                     }
                 }
             } else {
-                // Exclude series with no start time if a date range is specified.
                 info!(
                     "Series ID {} excluded because it has no start time for date filtering",
                     series_entry.series_id
@@ -552,7 +584,6 @@ pub async fn get_series_with_participants(
 
         // ---- Filter by Wins/Losses ----
         if filters.wins || filters.losses {
-            // Ensure both team IDs and scores exist.
             if series_entry.team1_id.is_none()
                 || series_entry.team2_id.is_none()
                 || series_entry.team1_score.is_none()
@@ -570,7 +601,6 @@ pub async fn get_series_with_participants(
             let team2_score = series_entry.team2_score.unwrap();
 
             if let Some(ref my_team) = my_team_id {
-                // Exclude series that do not involve the user's team.
                 if &team1_id != my_team && &team2_id != my_team {
                     info!(
                         "Series ID {} excluded because it doesn't involve my team",
@@ -670,22 +700,34 @@ pub async fn get_series_with_participants(
             }
         }
 
-        // ---- Filter by Champions Banned ----
+        // ---- Filter by Champions Banned (using event log) ----
         if !filters.champions_banned.is_empty() {
-            let banned_champions: Vec<String> = filters
+            let banned_filter: Vec<String> = filters
                 .champions_banned
                 .iter()
                 .map(|c| c.champ.clone())
                 .collect();
-            let banned_in_game = all_participants
-                .iter()
-                .any(|p| banned_champions.contains(&p.champion_name));
-            if banned_in_game {
-                info!(
-                    "Series ID {} excluded because banned champions were found",
-                    series_entry.series_id
-                );
-                continue;
+
+            // Query the event log for this series.
+            use crate::db::schema::event_logs::dsl as e;
+            let event_log_opt = e::event_logs
+                .filter(e::series_id.eq(&series_id_val))
+                .first::<crate::db::models::EventLog>(&mut connection)
+                .optional()
+                .map_err(|err| format!("Error querying event log: {}", err))?;
+
+            if let Some(event_log_record) = event_log_opt {
+                let banned_champs = extract_banned_champions(&event_log_record.event_log);
+                let banned_in_game = banned_filter
+                    .iter()
+                    .any(|champ| banned_champs.contains(champ));
+                if !banned_in_game {
+                    info!(
+                        "Series ID {} excluded because banned champions ({:?}) were not found in event log",
+                        series_entry.series_id, banned_champs
+                    );
+                    continue;
+                }
             }
         }
 
@@ -712,7 +754,7 @@ pub async fn get_series_with_participants(
         });
     }
 
-    if results.len() == 0 {
+    if results.is_empty() {
         return Err("No Series Found.".to_string());
     }
     results.sort_by(|a, b| {
