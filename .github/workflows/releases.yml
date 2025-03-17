@@ -48,6 +48,12 @@ jobs:
         with:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      # - name: Install SQLite (Windows)
+      #   if: matrix.platform == 'windows-latest'
+      #   run: |
+      #     choco install sqlite
+      #     echo "C:\ProgramData\chocolatey\lib\sqlite\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      #     echo "SQLITE3_LIB_DIR=C:\ProgramData\chocolatey\lib\sqlite\tools" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
