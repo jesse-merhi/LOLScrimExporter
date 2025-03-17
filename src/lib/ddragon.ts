@@ -17,8 +17,6 @@ export async function fetchChampionData(patch: string | undefined) {
  */
 export async function preloadChampionImages(patch: string, participants: Participant[]) {
     // Artificial delay for testing Suspense
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
     const championJson = await fetchChampionData(patch);
     const champions: Record<string, { image: { full: string }, id: string }> = championJson.data;
     console.log(Object.values(champions).filter((champ) => participants.some((particpant) => particpant.champion_name == champ.id)))
